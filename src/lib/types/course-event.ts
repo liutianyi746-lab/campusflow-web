@@ -1,0 +1,15 @@
+export type {
+  CampusEvent,
+  CampusEventType,
+  CourseFields,
+  EventSource,
+  IcsRequest,
+  LegacyCourseEvent as CourseEvent,
+  OcrResult,
+  Period,
+  RecognitionIntent,
+  RecognitionResult,
+  ScheduleTemplate,
+  WeekRule,
+  WeekType,
+} from "./campus-event";

@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model ScheduleTemplate {
+  id         String   @id @default(uuid())
+  name       String
+  schoolName String?
+  semester   String?
+  isActive   Boolean  @default(false)
+  periods    Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model RecognitionHistory {
+  id         String   @id @default(uuid())
+  inputHash  String
+  ocrRawText String
+  parsedJson Json
+  confidence Float?
+  sourceType String   @default("COURSE")
+  ipHash     String?
+  createdAt  DateTime @default(now())
+
+  @@index([inputHash])
+  @@index([createdAt])
+}
