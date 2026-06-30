@@ -6,6 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { extractPdfTextWithPdfJs } from "./pdfjs-fallback-extractor.ts";
+
 const execFileAsync = promisify(execFile);
 
 type PdfExtractionPayload = {
@@ -26,6 +28,29 @@ export type PdfTextExtraction = {
   warnings: string[];
   semesterStart?: string;
 };
+
+function extractionToResult(
+  payload: PdfExtractionPayload,
+  buffer: Buffer,
+  startedAt: number,
+  warnings: string[] = [],
+): PdfTextExtraction | null {
+  const text = payload.text?.trim();
+  if (!payload.success || !text) return null;
+
+  return {
+    ocrText: text,
+    confidence: payload.mode === "table" ? 0.95 : 0.78,
+    inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
+    processingTimeMs: Date.now() - startedAt,
+    source: "PDF",
+    warnings: [
+      ...warnings,
+      ...(payload.mode === "table" ? [] : ["PDF 未识别到表格结构，已使用文本抽取结果。"]),
+    ],
+    semesterStart: payload.semesterStart ?? undefined,
+  };
+}
 
 function pythonCandidates(): Array<{ command: string; argsPrefix: string[] }> {
   const userProfile = process.env.USERPROFILE;
@@ -73,18 +98,13 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfTextExtraction 
   try {
     await writeFile(pdfPath, buffer);
     const payload = await runExtractor(pdfPath);
-    const text = payload.text?.trim();
-    if (!payload.success || !text) return null;
+    const pythonResult = extractionToResult(payload, buffer, startedAt);
+    if (pythonResult) return pythonResult;
 
-    return {
-      ocrText: text,
-      confidence: payload.mode === "table" ? 0.95 : 0.78,
-      inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
-      processingTimeMs: Date.now() - startedAt,
-      source: "PDF",
-      warnings: payload.mode === "table" ? [] : ["PDF 未识别到表格结构，已使用文本抽取结果。"],
-      semesterStart: payload.semesterStart ?? undefined,
-    };
+    const fallback = await extractPdfTextWithPdfJs(buffer);
+    return extractionToResult(fallback, buffer, startedAt, [
+      "Python PDF 表格抽取不可用，已使用线上兼容的 PDF.js 抽取。",
+    ]);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

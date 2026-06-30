@@ -5,6 +5,7 @@ import { describe, it } from "node:test";
 import { applyTemplate } from "../../src/lib/parser/template-matcher.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
 import { extractPdfText } from "../../src/lib/pdf/pdf-text-extractor.ts";
+import { extractPdfTextWithPdfJs } from "../../src/lib/pdf/pdfjs-fallback-extractor.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
 
 describe("pdf schedule extraction", () => {
@@ -25,5 +26,22 @@ describe("pdf schedule extraction", () => {
 
     const events = applyTemplate(recognized.events, DEFAULT_SCHEDULE_TEMPLATE, extracted.semesterStart);
     assert.ok(events.some((event) => event.title === "大学物理" && event.startTime === "2026-09-08T19:55:00"));
+  });
+
+  it("extracts the same schedule with the JS fallback used on serverless deploys", async () => {
+    const pdfPath = "tmp/pdfs/schedule.pdf";
+    if (!existsSync(pdfPath)) return;
+
+    const extracted = await extractPdfTextWithPdfJs(readFileSync(pdfPath));
+
+    assert.equal(extracted.success, true);
+    assert.equal(extracted.semesterStart, "2026-09-07");
+    assert.equal(extracted.count, 14);
+    assert.match(extracted.text, /周四 3-4节 数字经济/);
+    assert.match(extracted.text, /周二 10-12节 大学物理/);
+
+    const recognized = localRecognize(extracted.text, "COURSE", "PDF");
+    assert.ok(recognized.events.length >= 10);
+    assert.ok(recognized.events.some((event) => event.title === "数字经济" && event.course?.dayOfWeek === 4));
   });
 });

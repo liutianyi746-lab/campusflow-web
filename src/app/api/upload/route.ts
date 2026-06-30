@@ -96,6 +96,23 @@ export async function POST(req: NextRequest) {
       if (extracted) {
         return corsJson({ success: true, data: extracted }, undefined, req);
       }
+
+      return corsJson(
+        {
+          success: true,
+          data: {
+            success: false,
+            ocrText: "",
+            confidence: 0,
+            processingTimeMs: 0,
+            inputHash: cryptoHash(buffer),
+            source: "PDF",
+            error: "PDF 没有提取到可识别文字，请确认文件不是纯扫描图片，或改用清晰截图上传。",
+          },
+        },
+        undefined,
+        req,
+      );
     }
 
     if (file.type === "text/plain" || file.type === "text/csv" || TEXT_EXTENSIONS.has(extension)) {
