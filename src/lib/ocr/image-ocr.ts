@@ -5,6 +5,9 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import sharp from "sharp";
+import type { Sharp } from "sharp";
+import { createWorker, OEM, PSM } from "tesseract.js";
 
 const execFileAsync = promisify(execFile);
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
@@ -30,6 +33,18 @@ type WindowsOcrPayload = {
   success?: boolean;
   items?: ImageOcrCell[];
   error?: string;
+};
+
+type PortableOcrPayload = {
+  success?: boolean;
+  text?: string;
+  confidence?: number;
+  error?: string;
+};
+
+type PortableOcrVariant = {
+  path: string;
+  name: string;
 };
 
 export type ImageOcrResult = {
@@ -114,6 +129,20 @@ function seatFromExamText(value: string, location?: string): string | undefined 
   const tail = location && compacted.includes(location) ? compacted.slice(compacted.indexOf(location) + location.length) : compacted;
   const matches = [...tail.matchAll(/(?:^|\s)(\d{1,4})\s*(?=(?:分散|集中|闭卷|开卷|$))/g)];
   return matches.at(-1)?.[1];
+}
+
+function scorePortableText(value: string): number {
+  const text = compactExamRowText(value);
+  const dateCount = (text.match(/(?:20\d{2}\s*年?)?\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/g) ?? []).length;
+  const timeCount = (text.match(/\d{1,2}\s*:\s*\d{2}/g) ?? []).length;
+  const locationCount = (text.match(/(?:经世楼|颐德楼|明德楼|笃行楼|教学楼|实验楼|晨曦排球场)\s*[A-Za-z]?\s*\d{0,4}/g) ?? []).length;
+  const titleCount = (text.match(/(?:数据结构|面向对象|中国传统文化|心理健康|离散数学|中国近现代史|高等数学|马克思主义|概率论|大学物理|计算机网络|数字经济|算法分析)/g) ?? []).length;
+  const courseSlotCount = (text.match(/周[一二三四五六日天]|\d{1,2}\s*[-~至到]\s*\d{1,2}\s*节/g) ?? []).length;
+  const tableSeparatorCount = (text.match(/[|丨]/g) ?? []).length;
+  const noisePenalty = /注意事项|有效身份证|准考证正|打印时间/.test(text) ? 18 : 0;
+  const usefulLength = Math.min(text.replace(/注意事项[\s\S]*$/, "").length, 900) / 120;
+
+  return dateCount * 8 + timeCount * 5 + locationCount * 7 + titleCount * 6 + courseSlotCount * 4 + tableSeparatorCount * 1.5 + usefulLength - noisePenalty;
 }
 
 function repairExamTitle(value: string, fullText: string): string {
@@ -295,6 +324,98 @@ async function runWindowsOcr(targetsPath: string): Promise<WindowsOcrPayload> {
   }
 }
 
+async function preparePortableOcrVariants(imagePath: string, outputDir: string): Promise<PortableOcrVariant[]> {
+  const image = sharp(imagePath);
+  const metadata = await image.metadata();
+  const width = metadata.width ?? 0;
+  const height = metadata.height ?? 0;
+  const variants: PortableOcrVariant[] = [];
+
+  async function addVariant(name: string, transformer: Sharp) {
+    const variantPath = path.join(outputDir, `${name}.png`);
+    await transformer
+      .grayscale()
+      .normalize()
+      .sharpen()
+      .resize({ width: name.includes("table") ? 2200 : 1800, withoutEnlargement: false })
+      .png()
+      .toFile(variantPath);
+    variants.push({ name, path: variantPath });
+  }
+
+  await addVariant("full", sharp(imagePath));
+
+  if (width > 0 && height > 0 && height / width > 1.25) {
+    await addVariant(
+      "portrait-mid",
+      sharp(imagePath).extract({
+        left: 0,
+        top: Math.round(height * 0.18),
+        width,
+        height: Math.max(1, Math.round(height * 0.52)),
+      }),
+    );
+    await addVariant(
+      "portrait-table",
+      sharp(imagePath).extract({
+        left: Math.round(width * 0.05),
+        top: Math.round(height * 0.25),
+        width: Math.max(1, Math.round(width * 0.9)),
+        height: Math.max(1, Math.round(height * 0.28)),
+      }),
+    );
+  }
+
+  return variants;
+}
+
+async function runPortableOcr(imagePath: string, outputDir: string): Promise<PortableOcrPayload> {
+  let worker: Awaited<ReturnType<typeof createWorker>> | undefined;
+
+  try {
+    const variants = await preparePortableOcrVariants(imagePath, outputDir);
+    worker = await createWorker("chi_sim+eng", OEM.LSTM_ONLY, {
+      cachePath: os.tmpdir(),
+      gzip: true,
+      langPath: "https://tessdata.projectnaptha.com/4.0.0",
+    });
+    let best: { text: string; confidence: number; score: number } | null = null;
+
+    for (const psm of [PSM.AUTO, PSM.SPARSE_TEXT]) {
+      await worker.setParameters({
+        tessedit_pageseg_mode: psm,
+        preserve_interword_spaces: "1",
+      });
+
+      for (const variant of variants) {
+        const result = await worker.recognize(variant.path);
+        const text = compactOcrText(result.data.text ?? "");
+        const score = scorePortableText(text)
+          + (result.data.confidence ?? 0) / 100
+          + (variant.name.includes("table") ? 20 : 0)
+          + (psm === PSM.SPARSE_TEXT ? 8 : 0);
+        if (!best || score > best.score) {
+          best = {
+            text,
+            confidence: Math.max(0, Math.min(1, (result.data.confidence ?? 0) / 100)),
+            score,
+          };
+        }
+      }
+    }
+
+    return {
+      success: Boolean(best?.text.trim()),
+      text: best?.text ?? "",
+      confidence: best?.confidence ?? 0,
+    };
+  } catch (error) {
+    return { success: false, error: String(error) };
+  } finally {
+    await worker?.terminate();
+  }
+}
+
 function extensionFor(fileType?: string): string {
   if (fileType?.includes("png")) return ".png";
   if (fileType?.includes("webp")) return ".webp";
@@ -310,16 +431,31 @@ export async function recognizeImage(buffer: Buffer, fileType?: string): Promise
 
   try {
     await writeFile(imagePath, buffer);
-    const preprocessed = await runPreprocess(imagePath, dir);
-    if (!preprocessed.success || !preprocessed.targets?.length) {
+
+    if (process.platform !== "win32" || process.env.CAMPUSFLOW_PORTABLE_OCR_ONLY === "true") {
+      const portable = await runPortableOcr(imagePath, dir);
       return {
-        success: false,
-        ocrText: "",
-        confidence: 0,
+        success: Boolean(portable.success && portable.text?.trim()),
+        ocrText: portable.text ?? "",
+        confidence: portable.confidence ?? 0,
         processingTimeMs: Date.now() - startedAt,
         inputHash,
         source: "IMAGE",
-        error: preprocessed.error ?? "未能定位图片中的文字区域。",
+        error: portable.success ? undefined : portable.error ?? "跨平台 OCR 未识别到有效文本。",
+      };
+    }
+
+    const preprocessed = await runPreprocess(imagePath, dir);
+    if (!preprocessed.success || !preprocessed.targets?.length) {
+      const portable = await runPortableOcr(imagePath, dir);
+      return {
+        success: Boolean(portable.success && portable.text?.trim()),
+        ocrText: portable.text ?? "",
+        confidence: portable.confidence ?? 0,
+        processingTimeMs: Date.now() - startedAt,
+        inputHash,
+        source: "IMAGE",
+        error: portable.success ? undefined : preprocessed.error ?? portable.error ?? "未能定位图片中的文字区域。",
       };
     }
 
@@ -328,14 +464,26 @@ export async function recognizeImage(buffer: Buffer, fileType?: string): Promise
     const items = recognized.items ?? [];
     const ocrText = composeImageOcrText(items);
 
+    if (recognized.success && ocrText.trim()) {
+      return {
+        success: true,
+        ocrText,
+        confidence: items.some((item) => item.kind === "cell" && item.text?.trim()) ? 0.82 : 0.68,
+        processingTimeMs: Date.now() - startedAt,
+        inputHash,
+        source: "IMAGE",
+      };
+    }
+
+    const portable = await runPortableOcr(imagePath, dir);
     return {
-      success: Boolean(recognized.success && ocrText.trim()),
-      ocrText,
-      confidence: items.some((item) => item.kind === "cell" && item.text?.trim()) ? 0.82 : 0.68,
+      success: Boolean(portable.success && portable.text?.trim()),
+      ocrText: portable.text ?? ocrText,
+      confidence: portable.confidence ?? 0,
       processingTimeMs: Date.now() - startedAt,
       inputHash,
       source: "IMAGE",
-      error: recognized.success ? undefined : recognized.error,
+      error: portable.success ? undefined : recognized.error ?? portable.error,
     };
   } finally {
     await rm(dir, { recursive: true, force: true });

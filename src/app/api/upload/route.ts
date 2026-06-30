@@ -30,6 +30,8 @@ const MAX_FILE_SIZE_MB = 25;
 const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
 const HEIC_ERROR_MESSAGE = "iPhone HEIC/HEIF 暂不支持识别，请改为 JPG/PNG/WebP，或截图后再上传。";
 
+export const maxDuration = 60;
+
 export function OPTIONS(req: NextRequest) {
   return corsPreflight(req);
 }
