@@ -1,0 +1,65 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { describe, it } from "node:test";
+
+const uploadPage = readFileSync("src/app/upload/page.tsx", "utf8");
+const uploadRoute = readFileSync("src/app/api/upload/route.ts", "utf8");
+const preprocessScript = readFileSync("src/lib/ocr/preprocess_timetable_image.py", "utf8");
+
+describe("mobile upload policy", () => {
+  it("lets phone browsers pick images and supports WebP screenshots", () => {
+    assert.match(uploadPage, /IMAGE_FILE_ACCEPT = "image\/\*/);
+    assert.match(uploadPage, /accept={fileAccept}/);
+    assert.match(uploadPage, /image\/webp/);
+    assert.match(uploadRoute, /image\/webp/);
+  });
+
+  it("tries to convert mobile photos before falling back to HEIC guidance", () => {
+    assert.match(uploadPage, /prepareFileForUpload/);
+    assert.match(uploadPage, /convertImageToJpeg/);
+    assert.match(uploadPage, /image\/heic/);
+    assert.match(uploadPage, /image\/heif/);
+    assert.match(uploadPage, /HEIC\/HEIF 暂不支持识别/);
+    assert.match(uploadRoute, /UNSUPPORTED_HEIC/);
+  });
+
+  it("keeps clear phone screenshots lossless instead of recompressing them", () => {
+    assert.match(uploadPage, /LOSSLESS_IMAGE_TYPES/);
+    assert.match(uploadPage, /isLosslessScreenshot/);
+    assert.match(uploadPage, /return \{ file, previewUrl \}/);
+    assert.match(uploadPage, /canvas\.toBlob[\s\S]*"image\/jpeg", 0\.94/);
+    assert.match(uploadPage, /const maxSide = 3600/);
+  });
+  it("uses a larger limit for phone photos on both client and server", () => {
+    assert.match(uploadPage, /MAX_FILE_SIZE_MB\s*=\s*25/);
+    assert.match(uploadRoute, /MAX_FILE_SIZE_MB\s*=\s*25/);
+  });
+
+  it("keeps source choices and file picker usable in mobile browsers", () => {
+    assert.match(uploadPage, /grid-cols-2/);
+    assert.doesNotMatch(uploadPage, /overflow-x-auto/);
+    assert.doesNotMatch(uploadPage, /className="hidden"/);
+    assert.doesNotMatch(uploadPage, /className="sr-only"/);
+    assert.doesNotMatch(uploadPage, /absolute inset-0/);
+    assert.doesNotMatch(uploadPage, /opacity-0/);
+    assert.match(uploadPage, /type="file"/);
+    assert.match(uploadPage, /file:mr-4/);
+    assert.match(uploadPage, /PDF_FILE_ACCEPT/);
+    assert.match(uploadPage, /EXCEL_FILE_ACCEPT/);
+    assert.match(uploadPage, /\.pdf/);
+    assert.match(uploadPage, /\.xls/);
+    assert.match(uploadPage, /\.xlsx/);
+  });
+
+  it("crops admission-ticket table rows for exam screenshots", () => {
+    assert.match(preprocessScript, /build_exam_row_targets/);
+    assert.match(preprocessScript, /"kind": "examRow"/);
+    assert.match(preprocessScript, /exam_row_/);
+  });
+  it("does not continue to event generation when OCR or parsing returns nothing", () => {
+    assert.match(uploadPage, /uploadResponse\.data\?\.success\s*===\s*false/);
+    assert.match(uploadPage, /uploadResponse\.data\?\.ocrText\?\.trim\(\)/);
+    assert.match(uploadPage, /parsedEvents\.length/);
+    assert.match(uploadPage, /没有识别到可生成的时间事件/);
+  });
+});

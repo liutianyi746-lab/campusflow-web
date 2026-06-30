@@ -1,5 +1,6 @@
-﻿import crypto from "node:crypto";
+import crypto from "node:crypto";
 import type { EventSource } from "@/lib/types/campus-event";
+import { recognizeImage } from "./image-ocr.ts";
 
 const COURSE_SAMPLE = `课程表
 周一 1-2节 高等数学 A 张老师 教学楼 A301 1-16周
@@ -61,6 +62,22 @@ function sourceFor(fileType?: string): EventSource {
 
 export async function recognize(buffer: Buffer, fileType?: string, options: RecognizeOptions = {}) {
   const startedAt = Date.now();
+
+  if (fileType?.startsWith("image/") && buffer.length > 256) {
+    const imageResult = await recognizeImage(buffer, fileType);
+    if (imageResult.success) return imageResult;
+
+    return {
+      success: false,
+      ocrText: "",
+      confidence: 0,
+      processingTimeMs: Date.now() - startedAt,
+      inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
+      source: "IMAGE" as EventSource,
+      error: imageResult.error ?? "图片 OCR 未识别到有效文本，请尝试裁剪课表区域后重新上传。",
+    };
+  }
+
   await new Promise((resolve) => setTimeout(resolve, 250));
 
   return {

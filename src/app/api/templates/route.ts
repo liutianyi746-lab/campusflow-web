@@ -1,14 +1,23 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
+import { corsJson, corsPreflight } from "@/lib/http/cors";
 import { DEFAULT_PERIODS, DEFAULT_SCHEDULE_TEMPLATE } from "@/lib/schedule/default-template";
 
-export async function GET() {
-  return NextResponse.json({
-    success: true,
-    data: [DEFAULT_SCHEDULE_TEMPLATE],
-    defaults: DEFAULT_PERIODS,
-    persistence: "memory-only",
-  });
+export function OPTIONS(req: NextRequest) {
+  return corsPreflight(req);
+}
+
+export async function GET(req: NextRequest) {
+  return corsJson(
+    {
+      success: true,
+      data: [DEFAULT_SCHEDULE_TEMPLATE],
+      defaults: DEFAULT_PERIODS,
+      persistence: "memory-only",
+    },
+    undefined,
+    req,
+  );
 }
 
 export async function POST(req: NextRequest) {
@@ -26,26 +35,31 @@ export async function POST(req: NextRequest) {
   };
 
   if (!body.name?.trim()) {
-    return NextResponse.json(
+    return corsJson(
       {
         success: false,
         error: { code: "INVALID_TEMPLATE", message: "模板名称不能为空" },
       },
       { status: 400 },
+      req,
     );
   }
 
   const periods = body.periods?.length ? body.periods : DEFAULT_PERIODS;
-  return NextResponse.json({
-    success: true,
-    data: {
-      id: `memory-template-${Date.now()}`,
-      name: body.name.trim(),
-      schoolName: body.schoolName ?? null,
-      semester: body.semester ?? null,
-      isActive: body.isActive ?? false,
-      periods,
+  return corsJson(
+    {
+      success: true,
+      data: {
+        id: `memory-template-${Date.now()}`,
+        name: body.name.trim(),
+        schoolName: body.schoolName ?? null,
+        semester: body.semester ?? null,
+        isActive: body.isActive ?? false,
+        periods,
+      },
+      persistence: "not-saved",
     },
-    persistence: "not-saved",
-  });
+    undefined,
+    req,
+  );
 }

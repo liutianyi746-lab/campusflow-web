@@ -11,6 +11,7 @@ import {
   formatEventTime,
   sourceLabel,
 } from "@/lib/ui/event-format";
+import { apiUrl } from "@/lib/http/api-client";
 import type { CampusEvent, CampusEventType, CourseFields, WeekType } from "@/lib/types/campus-event";
 import { useEventStore } from "@/stores/use-event-store";
 
@@ -351,7 +352,7 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
 
 export default function EditorPage() {
   const router = useRouter();
-  const { events, selectedIds, toggleSelect, selectAll, removeEvent, appendEvents, updateEvent } = useEventStore();
+  const { events, selectedIds, scheduleTemplate, semesterStart, setSemesterStart, toggleSelect, selectAll, removeEvent, appendEvents, updateEvent } = useEventStore();
   const [input, setInput] = useState("下周五晚上七点开班会，地点线上会议");
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
@@ -368,10 +369,10 @@ export default function EditorPage() {
     setMessage("");
 
     try {
-      const response = await fetch("/api/parse", {
+      const response = await fetch(apiUrl("/api/parse"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ naturalInput: input, source: "TEXT" }),
+        body: JSON.stringify({ naturalInput: input, source: "TEXT", semesterStart, scheduleTemplate }),
       }).then((res) => res.json());
 
       const parsedEvents = response.data?.events ?? [];
@@ -397,13 +398,14 @@ export default function EditorPage() {
       return;
     }
 
-    const response = await fetch("/api/ics", {
+    const response = await fetch(apiUrl("/api/ics"), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         events: selectedEvents,
-        semesterStart: "2026-02-23",
+        semesterStart,
         calendarName: "CampusFlow 校园事件",
+        periods: scheduleTemplate.periods,
       }),
     });
 
@@ -446,12 +448,23 @@ export default function EditorPage() {
           <h1 className="mt-2 text-3xl font-black text-emerald-950">核对识别结果</h1>
           <p className="mt-3 max-w-2xl text-stone-600">逐条修正识别错的课程、地点和时间，再导出 ICS。</p>
         </div>
-        <button
-          onClick={exportIcs}
-          className="rounded-lg bg-emerald-900 px-5 py-3 font-black text-lime-200 transition hover:bg-emerald-800"
-        >
-          导出 ICS（{selectedIds.size}）
-        </button>
+        <div className="grid gap-3 sm:grid-cols-[180px_auto] sm:items-end">
+          <label>
+            <span className="text-sm font-semibold text-stone-700">第一周周一</span>
+            <input
+              type="date"
+              value={semesterStart}
+              onChange={(event) => setSemesterStart(event.target.value)}
+              className="mt-2 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 outline-emerald-700"
+            />
+          </label>
+          <button
+            onClick={exportIcs}
+            className="rounded-lg bg-emerald-900 px-5 py-3 font-black text-lime-200 transition hover:bg-emerald-800"
+          >
+            导出 ICS（{selectedIds.size}）
+          </button>
+        </div>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[360px_1fr]">

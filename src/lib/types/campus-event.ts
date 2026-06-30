@@ -109,6 +109,7 @@ export interface IcsRequest {
   events: CampusEvent[];
   semesterStart: string;
   calendarName: string;
+  periods?: Period[];
 }
 
 export type LegacyCourseEvent = CourseFields & {

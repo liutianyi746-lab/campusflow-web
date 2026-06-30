@@ -1,4 +1,4 @@
-﻿import type { RecognitionIntent } from "@/lib/types/campus-event";
+import type { RecognitionIntent } from "@/lib/types/campus-event";
 
 const KEYWORDS: Record<Exclude<RecognitionIntent, "AUTO" | "NATURAL_LANGUAGE">, string[]> = {
   COURSE: ["课程", "课表", "星期", "周一", "周二", "周三", "周四", "周五", "节", "教室", "教师", "任课"],
@@ -8,8 +8,29 @@ const KEYWORDS: Record<Exclude<RecognitionIntent, "AUTO" | "NATURAL_LANGUAGE">, 
   NOTICE: ["会议", "班会", "讲座", "活动", "报名", "通知", "微信", "微信群", "QQ", "QQ群", "截图"],
 };
 
+function normalizeForRouting(text: string): string {
+  return text
+    .replace(/[：]/g, ":")
+    .replace(/[—–－]/g, "-")
+    .replace(/[一]/g, "-")
+    .replace(/\b(\d)\s+(\d)\s*:/g, "$1$2:")
+    .replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2");
+}
+
 function looksLikeExamTable(text: string): boolean {
-  return /(?:^|\n)\s*\d{1,3}\s+20\d{2}\D{1,6}\d{1,2}\D{1,6}\d{1,2}\D{0,12}[（(]?\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}/.test(text);
+  const normalized = normalizeForRouting(text);
+  if (/(?:^|\n)\s*\d{1,3}\s+20\d{2}\D{1,6}\d{1,2}\D{1,6}\d{1,2}\D{0,16}[（(]?\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}/.test(normalized)) {
+    return true;
+  }
+
+  const dateFirstRows = normalized
+    .split(/[\r\n]+/)
+    .filter((line) => /20\d{2}\D{1,6}\d{1,2}\D{1,6}\d{1,2}/.test(line))
+    .filter((line) => /\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}/.test(line))
+    .filter((line) => /(?:楼|教室|考场)\s*[A-Za-z]?\s*\d{0,4}|\b[A-Za-z]\s*\d{2,4}\b/.test(line))
+    .filter((line) => /(?:分散|集中|闭卷|开卷|\s\d{1,3}\s*$)/.test(line));
+
+  return dateFirstRows.length >= 2;
 }
 
 export function route(text: string): RecognitionIntent {

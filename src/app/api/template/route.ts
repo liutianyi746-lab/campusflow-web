@@ -1,1 +1,1 @@
-export { GET, POST } from "../templates/route";
+export { GET, OPTIONS, POST } from "../templates/route";

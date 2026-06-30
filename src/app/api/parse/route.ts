@@ -1,9 +1,12 @@
-﻿import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+
+import { corsJson, corsPreflight } from "@/lib/http/cors";
 
 import { chat, hasDeepSeekKey } from "@/lib/ai/deepseek-client";
 import { buildCoursePrompt } from "@/lib/ai/prompts/course-prompt";
 import { buildGeneralPrompt } from "@/lib/ai/prompts/general-prompt";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "@/lib/schedule/default-template";
+import { normalizeSemesterStart } from "@/lib/semester/default-semester";
 import { route } from "@/lib/parser/parser-router";
 import { applyTemplate } from "@/lib/parser/template-matcher";
 import { localRecognize } from "@/lib/parser/local-recognizer";
@@ -66,21 +69,26 @@ async function recognizeWithDeepSeek(
   );
 }
 
+export function OPTIONS(req: NextRequest) {
+  return corsPreflight(req);
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = (await req.json()) as ParseBody;
     const text = body.naturalInput ?? body.ocrText;
     if (!text?.trim()) {
-      return NextResponse.json(
+      return corsJson(
         {
           success: false,
           error: { code: "INVALID_INPUT", message: "需要 ocrText 或 naturalInput" },
         },
         { status: 400 },
+        req,
       );
     }
 
-    const semesterStart = body.semesterStart ?? "2026-02-23";
+    const semesterStart = normalizeSemesterStart(body.semesterStart);
     const scheduleTemplate = scheduleTemplateFrom(body);
     const intent = requestedIntent(body, text);
     const source = fallbackSource(body);
@@ -113,7 +121,7 @@ export async function POST(req: NextRequest) {
     const overallConfidence =
       events.reduce((sum, event) => sum + event.confidence, 0) / events.length || 0;
 
-    return NextResponse.json({
+    return corsJson({
       success: true,
       data: {
         events,
@@ -126,14 +134,15 @@ export async function POST(req: NextRequest) {
         templateApplied: events.some((event) => event.type === "COURSE"),
         warnings: allWarnings,
       },
-    });
+    }, undefined, req);
   } catch (error) {
-    return NextResponse.json(
+    return corsJson(
       {
         success: false,
         error: { code: "PARSE_FAILED", message: String(error) },
       },
       { status: 500 },
+      req,
     );
   }
 }

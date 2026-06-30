@@ -1,10 +1,11 @@
-﻿"use client";
+"use client";
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StepIndicator } from "@/app/_components/step-indicator";
 import { useEventStore } from "@/stores/use-event-store";
 import { useStepStore } from "@/stores/use-step-store";
+import { apiUrl } from "@/lib/http/api-client";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
@@ -12,12 +13,113 @@ const SUPPORTED_TYPES = new Set([
   "image/jpeg",
   "image/png",
   "image/jpg",
+  "image/webp",
   "application/pdf",
   "text/csv",
   "text/plain",
   "application/vnd.ms-excel",
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
 ]);
+
+const UNSUPPORTED_MOBILE_IMAGE_TYPES = new Set(["image/heic", "image/heif"]);
+const LOSSLESS_IMAGE_TYPES = new Set(["image/png", "image/webp"]);
+const SUPPORTED_EXTENSIONS = new Set(["jpg", "jpeg", "png", "webp", "pdf", "csv", "txt", "xls", "xlsx"]);
+const UNSUPPORTED_MOBILE_IMAGE_EXTENSIONS = new Set(["heic", "heif"]);
+const LOSSLESS_IMAGE_EXTENSIONS = new Set(["png", "webp"]);
+const MAX_FILE_SIZE_MB = 25;
+const MAX_FILE_SIZE = MAX_FILE_SIZE_MB * 1024 * 1024;
+const IMAGE_FILE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp";
+const PDF_FILE_ACCEPT = ".pdf,application/pdf";
+const EXCEL_FILE_ACCEPT = ".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
+const TEXT_FILE_ACCEPT = ".txt,text/plain";
+
+function fileExtension(file: File): string {
+  return file.name.toLowerCase().split(".").pop() ?? "";
+}
+
+function isUnsupportedMobileImage(file: File): boolean {
+  const extension = fileExtension(file);
+  return UNSUPPORTED_MOBILE_IMAGE_TYPES.has(file.type) || UNSUPPORTED_MOBILE_IMAGE_EXTENSIONS.has(extension);
+}
+
+function isSupportedUploadFile(file: File): boolean {
+  const extension = fileExtension(file);
+  return SUPPORTED_TYPES.has(file.type) || SUPPORTED_EXTENSIONS.has(extension);
+}
+
+function isLosslessScreenshot(file: File): boolean {
+  const extension = fileExtension(file);
+  return file.size <= MAX_FILE_SIZE && (LOSSLESS_IMAGE_TYPES.has(file.type) || LOSSLESS_IMAGE_EXTENSIONS.has(extension));
+}
+
+function uploadAcceptForPreset(presetId: string): string {
+  if (presetId === "pdf") return PDF_FILE_ACCEPT;
+  if (presetId === "excel") return EXCEL_FILE_ACCEPT;
+  if (presetId === "text") return TEXT_FILE_ACCEPT;
+  if (presetId === "schedule") return `${IMAGE_FILE_ACCEPT},${PDF_FILE_ACCEPT},${TEXT_FILE_ACCEPT}`;
+  return IMAGE_FILE_ACCEPT;
+}
+
+function shouldPrepareAsImage(file: File): boolean {
+  const extension = fileExtension(file);
+  return file.type.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(extension);
+}
+
+async function convertImageToJpeg(file: File): Promise<File> {
+  const objectUrl = URL.createObjectURL(file);
+
+  try {
+    const image = new Image();
+    image.decoding = "async";
+    const loaded = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error("图片解码失败"));
+    });
+    image.src = objectUrl;
+    await loaded;
+
+    const maxSide = 3600;
+    const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext("2d");
+    if (!context) throw new Error("图片压缩失败");
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, 0, 0, width, height);
+
+    const blob = await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((result) => {
+        if (result) resolve(result);
+        else reject(new Error("图片压缩失败"));
+      }, "image/jpeg", 0.94);
+    });
+    const baseName = file.name.replace(/\.[^.]+$/, "") || "mobile-photo";
+    return new File([blob], `${baseName}.jpg`, { type: "image/jpeg", lastModified: file.lastModified });
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
+async function prepareFileForUpload(file: File): Promise<{ file: File; previewUrl: string | null }> {
+  if (!shouldPrepareAsImage(file)) return { file, previewUrl: null };
+
+  const previewUrl = URL.createObjectURL(file);
+  const isAlreadySmallJpeg = file.type === "image/jpeg" && file.size <= MAX_FILE_SIZE;
+  if (isAlreadySmallJpeg || isLosslessScreenshot(file)) return { file, previewUrl };
+
+  try {
+    return { file: await convertImageToJpeg(file), previewUrl };
+  } catch {
+    if (isUnsupportedMobileImage(file)) {
+      throw new Error("iPhone HEIC/HEIF 暂不支持识别，请在相册中分享为 JPG，或截图后再上传。");
+    }
+    return { file, previewUrl };
+  }
+}
 
 const SOURCE_PRESETS: Array<{
   id: string;
@@ -109,7 +211,7 @@ const SAMPLE_EVENTS: CampusEvent[] = [
 export default function UploadPage() {
   const router = useRouter();
   const { setImageUrl, setOcrResult } = useStepStore();
-  const { setEvents, scheduleTemplate, setScheduleTemplate, resetScheduleTemplate } = useEventStore();
+  const { setEvents, scheduleTemplate, semesterStart, setSemesterStart, setScheduleTemplate, resetScheduleTemplate } = useEventStore();
   const [selectedPresetId, setSelectedPresetId] = useState("image");
   const selectedPreset = SOURCE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SOURCE_PRESETS[0];
   const [textInput, setTextInput] = useState("下周五晚上七点开班会，地点线上会议");
@@ -125,6 +227,7 @@ export default function UploadPage() {
 
   const isScheduleMode = selectedPresetId === "schedule";
   const acceptsText = selectedPresetId === "text" || selectedPresetId === "notice";
+  const fileAccept = uploadAcceptForPreset(selectedPresetId);
 
   const finishWithEvents = useCallback(
     (events: CampusEvent[], rawText = "手动输入", hash = "memory") => {
@@ -170,52 +273,60 @@ export default function UploadPage() {
           return;
         }
 
-        const parseResponse = await fetch("/api/parse", {
+        const parseResponse = await fetch(apiUrl("/api/parse"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ naturalInput: value, source, intent, scheduleTemplate }),
+          body: JSON.stringify({ naturalInput: value, source, intent, semesterStart, scheduleTemplate }),
         }).then((response) => response.json());
 
         if (!parseResponse.success) {
           throw new Error(parseResponse.error?.message ?? "事件生成失败");
         }
 
-        finishWithEvents(parseResponse.data.events ?? [], value, "manual");
+        const parsedEvents = parseResponse.data.events ?? [];
+        if (!parsedEvents.length) {
+          throw new Error("没有识别到可生成的时间事件，请补充日期、时间、课程或地点后再试。");
+        }
+
+        finishWithEvents(parsedEvents, value, "manual");
       } catch (err) {
         setError(err instanceof Error ? err.message : "处理失败，请稍后重试。");
       } finally {
         setLoading(false);
       }
     },
-    [applyScheduleText, finishWithEvents, isScheduleMode, scheduleTemplate],
+    [applyScheduleText, finishWithEvents, isScheduleMode, scheduleTemplate, semesterStart],
   );
 
   const handleFile = useCallback(
     async (file: File) => {
       setError("");
 
-      if (!SUPPORTED_TYPES.has(file.type)) {
-        setError("请上传图片、PDF、Excel、CSV 或文本文件。");
+      if (!isSupportedUploadFile(file) && !isUnsupportedMobileImage(file)) {
+        setError("请上传 JPG、PNG、WebP 图片、PDF、Excel、CSV 或文本文件。");
         return;
       }
 
-      if (file.size > 10 * 1024 * 1024) {
-        setError("文件不能超过 10MB。");
-        return;
-      }
-
-      const objectUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-      setPreview(objectUrl);
-      setImageUrl(objectUrl);
       setLoading(true);
-      setStatus(isScheduleMode ? "正在读取作息表..." : "正在读取来源...");
+      setStatus(shouldPrepareAsImage(file) ? "正在准备图片..." : isScheduleMode ? "正在读取作息表..." : "正在读取来源...");
 
       try {
+        const prepared = await prepareFileForUpload(file);
+        const uploadFile = prepared.file;
+
+        if (uploadFile.size > MAX_FILE_SIZE) {
+          throw new Error(`文件不能超过 ${MAX_FILE_SIZE_MB}MB。`);
+        }
+
+        setPreview(prepared.previewUrl);
+        setImageUrl(prepared.previewUrl);
+        setStatus(isScheduleMode ? "正在读取作息表..." : "正在读取来源...");
+
         const formData = new FormData();
-        formData.append("file", file);
+        formData.append("file", uploadFile);
         if (isScheduleMode) formData.append("purpose", "schedule");
 
-        const uploadResponse = await fetch("/api/upload", {
+        const uploadResponse = await fetch(apiUrl("/api/upload"), {
           method: "POST",
           body: formData,
         }).then((response) => response.json());
@@ -223,6 +334,17 @@ export default function UploadPage() {
         if (!uploadResponse.success) {
           throw new Error(uploadResponse.error?.message ?? "文件上传失败");
         }
+
+        if (uploadResponse.data?.success === false) {
+          throw new Error(uploadResponse.data.error ?? "图片识别失败，请裁剪清晰后重试。");
+        }
+
+        if (!uploadResponse.data?.ocrText?.trim()) {
+          throw new Error("没有识别到文字，请换一张更清晰的图片/PDF，或改用文本输入。");
+        }
+
+        const resolvedSemesterStart = uploadResponse.data.semesterStart ?? semesterStart;
+        if (uploadResponse.data.semesterStart) setSemesterStart(uploadResponse.data.semesterStart);
 
         if (isScheduleMode) {
           const ok = applyScheduleText(
@@ -236,14 +358,14 @@ export default function UploadPage() {
         }
 
         setStatus("正在生成时间事件...");
-        const parseResponse = await fetch("/api/parse", {
+        const parseResponse = await fetch(apiUrl("/api/parse"), {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             ocrText: uploadResponse.data.ocrText,
             intent: selectedPreset.intent,
             source: uploadResponse.data.source ?? selectedPreset.source,
-            semesterStart: uploadResponse.data.semesterStart,
+            semesterStart: resolvedSemesterStart,
             scheduleTemplate,
           }),
         }).then((response) => response.json());
@@ -252,8 +374,13 @@ export default function UploadPage() {
           throw new Error(parseResponse.error?.message ?? "事件生成失败");
         }
 
+        const parsedEvents = parseResponse.data.events ?? [];
+        if (!parsedEvents.length) {
+          throw new Error("没有识别到可生成的时间事件，请补充日期、时间、课程或地点后再试。");
+        }
+
         finishWithEvents(
-          parseResponse.data.events ?? [],
+          parsedEvents,
           uploadResponse.data.ocrText,
           uploadResponse.data.inputHash,
         );
@@ -263,7 +390,7 @@ export default function UploadPage() {
         setLoading(false);
       }
     },
-    [applyScheduleText, finishWithEvents, isScheduleMode, scheduleTemplate, selectedPreset.intent, selectedPreset.source, setImageUrl, setOcrResult],
+    [applyScheduleText, finishWithEvents, isScheduleMode, scheduleTemplate, selectedPreset.intent, selectedPreset.source, semesterStart, setImageUrl, setOcrResult, setSemesterStart],
   );
 
 
@@ -302,14 +429,14 @@ export default function UploadPage() {
         </button>
       </div>
 
-      <section className="mb-5 overflow-x-auto rounded-xl border border-emerald-100 bg-white p-2 shadow-sm">
-        <div className="flex min-w-max gap-2">
+      <section className="mb-5 rounded-xl border border-emerald-100 bg-white p-2 shadow-sm">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {SOURCE_PRESETS.map((preset) => (
             <button
               key={preset.id}
               onClick={() => choosePreset(preset.id)}
               className={[
-                "rounded-lg px-4 py-3 text-left transition",
+                "min-h-20 rounded-lg px-3 py-3 text-left transition sm:px-4",
                 selectedPresetId === preset.id ? "bg-emerald-900 text-white" : "text-stone-700 hover:bg-stone-50",
               ].join(" ")}
             >
@@ -359,17 +486,20 @@ export default function UploadPage() {
                   <p className="text-sm font-semibold text-emerald-700">当前来源</p>
                   <h2 className="mt-2 text-2xl font-black text-emerald-950">{selectedPreset.label}</h2>
                   <p className="mt-2 text-stone-600">{selectedPreset.description}</p>
-                  <p className="mt-4 text-sm text-stone-500">支持图片、PDF、Excel 和文本；最大 10MB。</p>
+                  <p className="mt-4 text-sm text-stone-500">支持图片、PDF、Excel 和文本；最大 25MB。</p>
                 </div>
-                <label className="inline-flex cursor-pointer items-center justify-center rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white shadow-lg shadow-emerald-100 transition hover:bg-emerald-800">
-                  {isScheduleMode ? "上传作息表" : "选择文件"}
+                <label className="block w-full md:w-80">
+                  <span className="mb-2 block text-sm font-bold text-emerald-900">
+                    {isScheduleMode ? "上传作息表" : "选择文件"}
+                  </span>
                   <input
                     type="file"
-                    accept="image/jpeg,image/png,application/pdf,text/csv,text/plain,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                    className="hidden"
+                    accept={fileAccept}
+                    className="block min-h-12 w-full cursor-pointer rounded-lg border border-emerald-200 bg-white text-sm font-semibold text-stone-700 shadow-sm file:mr-4 file:min-h-12 file:cursor-pointer file:border-0 file:bg-emerald-700 file:px-5 file:py-3 file:font-semibold file:text-white hover:file:bg-emerald-800"
                     onChange={(event) => {
                       const file = event.target.files?.[0];
                       if (file) void handleFile(file);
+                      event.currentTarget.value = "";
                     }}
                   />
                 </label>
@@ -443,6 +573,20 @@ export default function UploadPage() {
         </main>
 
         <aside className="space-y-5">
+          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+            <h2 className="font-bold text-emerald-950">学期起始</h2>
+            <p className="mt-1 text-sm text-stone-500">请填第一周周一，课程周次会按这个日期换算。</p>
+            <label className="mt-4 block">
+              <span className="text-sm font-semibold text-stone-700">第一周周一</span>
+              <input
+                type="date"
+                value={semesterStart}
+                onChange={(event) => setSemesterStart(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+              />
+            </label>
+          </section>
+
           <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
             <div className="flex items-start justify-between gap-3">
               <div>
