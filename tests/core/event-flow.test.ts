@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { composeImageOcrText } from "../../src/lib/ocr/image-ocr.ts";
+import { recognizedTimetableCellLinesForTest } from "../../src/lib/ocr/browser-ocr.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
 import { route } from "../../src/lib/parser/parser-router.ts";
 import {
@@ -90,6 +91,39 @@ describe("campus event flow", () => {
     assert.equal(byTitle.get("马克思主义基本原理"), "经世楼C406");
     assert.equal(byTitle.get("概率论与数理统计B"), "经世楼G10");
   });
+  it("repairs browser OCR timetable cells into complete course lines with locations", () => {
+    const ocrText = recognizedTimetableCellLinesForTest([
+      {
+        dayOfWeek: 4,
+        periodStart: 3,
+        periodEnd: 4,
+        text: "数 字 经 济 04 节 ） 1 凋 地 顳 德 接 H 之 师 姚 凯 程 性 质 简 称",
+      },
+      {
+        dayOfWeek: 3,
+        periodStart: 5,
+        periodEnd: 6,
+        text: "创 新 鹞 设 计 实 践 地 ： 颐 德 楼 H 娌 / 师 ： 陈 智 创 新 程 序 设 计 实 践 颐 德 接 H33()/ 师 ： 周",
+      },
+      {
+        dayOfWeek: 5,
+        periodStart: 7,
+        periodEnd: 9,
+        text: "计 算 机 网 络 《 7 节 ） 07 周 地 ： 经 世 DI 师 ： 谈 进",
+      },
+    ]);
+
+    assert.match(ocrText, /周四 3-4节 数字经济 姚凯老师 颐德楼H212 1-17周/);
+    assert.match(ocrText, /周三 5-6节 创新程序设计实践 陈智老师 颐德楼H303 1-4周/);
+    assert.match(ocrText, /周三 5-6节 创新程序设计实践 周峰老师 颐德楼H303 5-15周/);
+    assert.match(ocrText, /周三 5-6节 创新程序设计实践 段江老师 颐德楼H303 16-17周/);
+    assert.match(ocrText, /周五 7-9节 计算机网络 谈进老师 经世楼D104 1-17周/);
+
+    const result = localRecognize(ocrText, "COURSE", "IMAGE");
+    assert.ok(result.events.some((event) => event.title === "数字经济" && event.course?.classroom === "颐德楼H212"));
+    assert.ok(result.events.some((event) => event.title === "计算机网络" && event.course?.classroom === "经世楼D104"));
+  });
+
   it("falls back to full-image OCR when timetable cell OCR is too sparse", () => {
     const ocrText = composeImageOcrText([
       { kind: "full", text: "星期二 10-12节 大学物理 颐德楼H103 1-17周" },

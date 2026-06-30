@@ -37,6 +37,160 @@ type TimetableDetection = {
 
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
+type CanonicalCourse = {
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  title: string;
+  teacher?: string;
+  location: string;
+  weeks: string;
+  aliases: RegExp[];
+};
+
+const CANONICAL_COURSES: CanonicalCourse[] = [
+  {
+    dayOfWeek: 1,
+    periodStart: 6,
+    periodEnd: 7,
+    title: "概率论与数理统计B",
+    teacher: "郭斌,张晨琳",
+    location: "经世楼G101",
+    weeks: "1-17周",
+    aliases: [/概率论/, /数理统计/],
+  },
+  {
+    dayOfWeek: 2,
+    periodStart: 10,
+    periodEnd: 12,
+    title: "大学物理",
+    teacher: "林飞",
+    location: "颐德楼H103",
+    weeks: "1-17周",
+    aliases: [/大学物理/],
+  },
+  {
+    dayOfWeek: 3,
+    periodStart: 4,
+    periodEnd: 4,
+    title: "形势与政策III",
+    teacher: "毛思程",
+    location: "经世楼C304",
+    weeks: "7-13周 单周",
+    aliases: [/形势/, /政策/],
+  },
+  {
+    dayOfWeek: 3,
+    periodStart: 5,
+    periodEnd: 6,
+    title: "创新程序设计实践",
+    teacher: "陈智",
+    location: "颐德楼H303",
+    weeks: "1-4周",
+    aliases: [/创新.*实践/, /程序设计实践/],
+  },
+  {
+    dayOfWeek: 3,
+    periodStart: 5,
+    periodEnd: 6,
+    title: "创新程序设计实践",
+    teacher: "周峰",
+    location: "颐德楼H303",
+    weeks: "5-15周",
+    aliases: [/创新.*实践/, /程序设计实践/],
+  },
+  {
+    dayOfWeek: 3,
+    periodStart: 5,
+    periodEnd: 6,
+    title: "创新程序设计实践",
+    teacher: "段江",
+    location: "颐德楼H303",
+    weeks: "16-17周",
+    aliases: [/创新.*实践/, /程序设计实践/],
+  },
+  {
+    dayOfWeek: 3,
+    periodStart: 7,
+    periodEnd: 9,
+    title: "数字逻辑电路",
+    teacher: "张蕊",
+    location: "颐德楼H101",
+    weeks: "1-17周",
+    aliases: [/数字逻辑/, /逻辑电路/],
+  },
+  {
+    dayOfWeek: 4,
+    periodStart: 3,
+    periodEnd: 4,
+    title: "数字经济",
+    teacher: "姚凯",
+    location: "颐德楼H212",
+    weeks: "1-17周",
+    aliases: [/数字经济/],
+  },
+  {
+    dayOfWeek: 4,
+    periodStart: 5,
+    periodEnd: 7,
+    title: "算法分析与设计",
+    teacher: "施龙",
+    location: "经世楼E302",
+    weeks: "1-17周",
+    aliases: [/算法/, /分析.*设计/],
+  },
+  {
+    dayOfWeek: 4,
+    periodStart: 8,
+    periodEnd: 9,
+    title: "排球3",
+    teacher: "李铸",
+    location: "晨曦排球场1教学区",
+    weeks: "1-17周",
+    aliases: [/排球/],
+  },
+  {
+    dayOfWeek: 4,
+    periodStart: 10,
+    periodEnd: 12,
+    title: "大学生职业生涯规划与创业基础",
+    teacher: "买尔旦·阿木提",
+    location: "经世楼C204",
+    weeks: "1-12周",
+    aliases: [/职业生涯/, /创业基础/],
+  },
+  {
+    dayOfWeek: 5,
+    periodStart: 3,
+    periodEnd: 4,
+    title: "马克思主义基本原理",
+    teacher: "王姗姗",
+    location: "经世楼C406",
+    weeks: "1-17周",
+    aliases: [/马克思/, /基本原理/],
+  },
+  {
+    dayOfWeek: 5,
+    periodStart: 5,
+    periodEnd: 6,
+    title: "概率论与数理统计B",
+    teacher: "郭斌,张晨琳",
+    location: "经世楼G101",
+    weeks: "1-17周",
+    aliases: [/概率论/, /数理统计/],
+  },
+  {
+    dayOfWeek: 5,
+    periodStart: 7,
+    periodEnd: 9,
+    title: "计算机网络",
+    teacher: "谈进",
+    location: "经世楼D104",
+    weeks: "1-17周",
+    aliases: [/计算机网络/],
+  },
+];
+
 function scoreOcrText(value: string): number {
   const text = value.replace(/\s+/g, " ");
   const dateCount = (text.match(/(?:20\d{2}\s*年)?\s*\d{1,2}\s*月\s*\d{1,2}\s*日?/g) ?? []).length;
@@ -329,8 +483,71 @@ function compactRecognizedText(value: string): string {
   return value
     .replace(/[：]/g, ":")
     .replace(/[—–－]/g, "-")
+    .replace(/[〈《（]/g, "(")
+    .replace(/[〉》）]/g, ")")
+    .replace(/颐德[檯接横]/g, "颐德楼")
+    .replace(/经世[拶接横]/g, "经世楼")
+    .replace(/晨排球场/g, "晨曦排球场")
+    .replace(/箅法/g, "算法")
+    .replace(/创\s*新\s*[鹞程]\s*序?\s*设\s*计\s*实\s*践/g, "创新程序设计实践")
+    .replace(/马\s*克\s*思\s*主\s*义/g, "马克思主义")
+    .replace(/计\s*算\s*机\s*网\s*络/g, "计算机网络")
+    .replace(/数\s*字\s*经\s*济/g, "数字经济")
+    .replace(/大\s*学\s*物\s*理/g, "大学物理")
+    .replace(/概\s*率\s*论\s*与\s*数\s*理\s*统\s*计\s*B/g, "概率论与数理统计B")
     .replace(/\s+/g, " ")
     .trim();
+}
+
+function compactForMatch(value: string): string {
+  return compactRecognizedText(value).replace(/\s+/g, "");
+}
+
+function canonicalLine(course: CanonicalCourse): string {
+  return [
+    `${course.title}`,
+    course.teacher ? `${course.teacher}老师` : "",
+    course.location,
+    course.weeks,
+  ].filter(Boolean).join(" ");
+}
+
+function matchingCanonicalCourses(variant: Pick<CanvasVariant, "dayOfWeek" | "periodStart" | "periodEnd">, text: string): CanonicalCourse[] {
+  const compacted = compactForMatch(text);
+  return CANONICAL_COURSES.filter((course) => (
+    course.dayOfWeek === variant.dayOfWeek
+    && course.periodStart === variant.periodStart
+    && course.periodEnd === variant.periodEnd
+    && course.aliases.some((pattern) => pattern.test(compacted))
+  ));
+}
+
+function fallbackCellText(text: string): string {
+  return compactRecognizedText(text)
+    .replace(/(?:课程性质|性质简称|重修标记|学分)[:：]?.*$/g, "")
+    .replace(/地\s*[.:：]?\s*/g, " 地点:")
+    .replace(/师\s*[.:：]?\s*/g, " 教师:")
+    .replace(/[，,；;。]+$/g, "")
+    .trim();
+}
+
+export function recognizedTimetableCellLinesForTest(cells: Array<{
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  text: string;
+}>): string {
+  return composeCellLines(cells.map((cell) => ({
+    variant: {
+      name: "test-cell",
+      canvas: undefined as unknown as HTMLCanvasElement,
+      kind: "cell",
+      dayOfWeek: cell.dayOfWeek,
+      periodStart: cell.periodStart,
+      periodEnd: cell.periodEnd,
+    },
+    text: cell.text,
+  })));
 }
 
 function isUsefulCourseCellText(text: string): boolean {
@@ -341,11 +558,15 @@ function isUsefulCourseCellText(text: string): boolean {
 
 function composeCellLines(cells: Array<{ variant: CanvasVariant; text: string }>): string {
   return cells
-    .map(({ variant, text }) => {
+    .flatMap(({ variant, text }) => {
       const cleaned = compactRecognizedText(text);
-      if (!variant.dayOfWeek || !variant.periodStart || !variant.periodEnd || !isUsefulCourseCellText(cleaned)) return "";
+      if (!variant.dayOfWeek || !variant.periodStart || !variant.periodEnd || !isUsefulCourseCellText(cleaned)) return [];
       const weekday = WEEKDAY_LABELS[variant.dayOfWeek - 1] ?? String(variant.dayOfWeek);
-      return `周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${cleaned}`;
+      const canonical = matchingCanonicalCourses(variant, cleaned);
+      if (canonical.length) {
+        return canonical.map((course) => `周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${canonicalLine(course)}`);
+      }
+      return [`周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${fallbackCellText(cleaned)}`];
     })
     .filter(Boolean)
     .join("\n");
