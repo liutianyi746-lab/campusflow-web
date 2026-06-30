@@ -99,6 +99,26 @@ function splitSentences(text: string): string[] {
     .filter(Boolean);
 }
 
+function normalizeExamOcrText(text: string): string {
+  return normalizeInput(text)
+    .replace(/[丨|]/g, " ")
+    .replace(/[QO]300/g, "(13:00")
+    .replace(/I300/g, "(13:00")
+    .replace(/2026[^\d]{0,3}\d{0,2}(\d{2})(\d{2})[H日]?/g, "2026年$1月$2日")
+    .replace(/(?<!\d)(0?[1-9]|1[0-2])\s*(\d{2})\s*[H日]?\s*(?=\()/g, "$1月$2日")
+    .replace(/(?=(?:20\d{2}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日?\s*\(?\s*\d{1,2}\s*:\s*\d{2})/g, "\n");
+}
+
+function splitExamSentences(text: string): string[] {
+  const normalized = normalizeExamOcrText(text);
+  const candidates = normalized
+    .split(/[\n\r。；;]/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  return candidates.length ? candidates : splitSentences(text);
+}
+
 function validDateParts(year: string, month: string, day: string): string | undefined {
   const monthNumber = Number(month);
   const dayNumber = Number(day);
@@ -387,6 +407,8 @@ function cleanExamTitle(input: string): string {
   cleaned = removeLiteral(cleaned, location)
     .replace(/^\s*\d{1,3}\s+/, " ")
     .replace(/20\d{2}\D{1,6}\d{1,2}\D{1,6}\d{1,2}\D?/g, " ")
+    .replace(/(?:^|[^\d])\d{1,2}\s*月\s*\d{1,2}\s*日?/g, " ")
+    .replace(/^\s*月\s*\d{1,2}\s*日?\s*/g, " ")
     .replace(/^[\s日号（）()]+/, " ")
     .replace(/^\s*\d{1,3}\s+/, " ")
     .replace(/[（(]\s*\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}\s*[)）]/g, " ")
@@ -418,7 +440,7 @@ function isExamNoiseLine(input: string): boolean {
 }
 function parseGeneralEvents(text: string, forcedType?: "EXAM" | "HOMEWORK" | "MEETING" | "ACTIVITY" | "REMINDER", source: EventSource = "TEXT") {
   const rawEvents = [];
-  const sentences = splitSentences(text);
+  const sentences = forcedType === "EXAM" ? splitExamSentences(text) : splitSentences(text);
 
   for (const sentence of sentences) {
     const type = forcedType ?? naturalType(sentence);
