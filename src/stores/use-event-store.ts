@@ -1,11 +1,13 @@
 ﻿import { create } from "zustand";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "@/lib/schedule/default-template";
+import { DEFAULT_SEMESTER_START, normalizeSemesterStart } from "@/lib/semester/default-semester";
 import type { CampusEvent, ScheduleTemplate } from "@/lib/types/campus-event";
 
 interface EventStore {
   events: CampusEvent[];
   selectedIds: Set<string>;
   scheduleTemplate: ScheduleTemplate;
+  semesterStart: string;
   setEvents: (events: CampusEvent[]) => void;
   appendEvents: (events: CampusEvent[]) => void;
   updateEvent: (id: string, patch: Partial<CampusEvent>) => void;
@@ -13,6 +15,7 @@ interface EventStore {
   toggleSelect: (id: string) => void;
   selectAll: () => void;
   clearSelection: () => void;
+  setSemesterStart: (date: string) => void;
   setScheduleTemplate: (template: ScheduleTemplate) => void;
   resetScheduleTemplate: () => void;
   reset: () => void;
@@ -22,6 +25,7 @@ export const useEventStore = create<EventStore>((set) => ({
   events: [],
   selectedIds: new Set(),
   scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE,
+  semesterStart: DEFAULT_SEMESTER_START,
   setEvents: (events) => set({ events, selectedIds: new Set(events.map((event) => event.id)) }),
   appendEvents: (events) =>
     set((state) => {
@@ -50,7 +54,14 @@ export const useEventStore = create<EventStore>((set) => ({
     }),
   selectAll: () => set((state) => ({ selectedIds: new Set(state.events.map((event) => event.id)) })),
   clearSelection: () => set({ selectedIds: new Set() }),
+  setSemesterStart: (date) => set({ semesterStart: normalizeSemesterStart(date) }),
   setScheduleTemplate: (template) => set({ scheduleTemplate: template }),
   resetScheduleTemplate: () => set({ scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE }),
-  reset: () => set({ events: [], selectedIds: new Set(), scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE }),
+  reset: () =>
+    set({
+      events: [],
+      selectedIds: new Set(),
+      scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE,
+      semesterStart: DEFAULT_SEMESTER_START,
+    }),
 }));

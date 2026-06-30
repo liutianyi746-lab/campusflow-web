@@ -1,5 +1,6 @@
 ﻿import type { CampusEvent, ScheduleTemplate } from "../types/campus-event.ts";
 import { expandWeekNumbers, resolveCourseDateTime } from "../events/week-engine.ts";
+import { DEFAULT_SEMESTER_START } from "../semester/default-semester.ts";
 
 function toLocalIso(date: Date): string {
   return date.toISOString().slice(0, 19);
@@ -8,7 +9,7 @@ function toLocalIso(date: Date): string {
 export function applyTemplate(
   events: CampusEvent[],
   template: ScheduleTemplate,
-  semesterStart = "2026-02-23",
+  semesterStart = DEFAULT_SEMESTER_START,
 ): CampusEvent[] {
   return events.map((event) => {
     if (event.type !== "COURSE" || !event.course) return event;

@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test:core": "node --test tests/core/*.test.ts"
+    "test:core": "node --test tests/core/*.test.ts",
+    "build:static": "node scripts/build-static.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -1,5 +1,6 @@
-import type { CampusEvent, EventSource, RecognitionIntent } from "../types/campus-event.ts";
+﻿import type { CampusEvent, EventSource, RecognitionIntent } from "../types/campus-event.ts";
 import { validateCourses, validateGeneralEvents } from "./validator.ts";
+import { route } from "./parser-router.ts";
 
 const WEEKDAY_MAP: Record<string, number> = {
   一: 1,
@@ -72,6 +73,15 @@ function normalizeInput(input: string): string {
     .replace(/[—–－]/g, "-")
     .replace(/[~～]/g, "~")
     .replace(/\u00a0/g, " ")
+    .replace(/\b(\d)\s+(\d)\s*:/g, "$1$2:")
+    .replace(/(\d{1,2})\s*:\s*(\d{2})/g, "$1:$2")
+    .replace(/(\d{1,2}:\d{2})\s*[一-]\s*(\d{1,2}:\d{2})/g, "$1-$2")
+    .replace(/颥/g, "颐")
+    .replace(/刈象/g, "对象")
+    .replace(/健从/g, "健康")
+    .replace(/颐德楼\s*旧\s*(\d{2})/g, "颐德楼H1$1")
+    .replace(/经肚楼/g, "经世楼")
+    .replace(/\b(\d)\s+(\d)(?=\s*(?:分散|集中|闭卷|开卷|$))/g, "$1$2")
     .trim();
 }
 
@@ -149,7 +159,15 @@ function timeRange(rawInput: string): { start: string; end: string } | undefined
   const input = normalizeInput(rawInput);
   const range = input.match(/(\d{1,2}:\d{2})\s*[-~至到]\s*(\d{1,2}:\d{2})/);
   if (range) {
-    return { start: range[1].padStart(5, "0"), end: range[2].padStart(5, "0") };
+    let start = range[1].padStart(5, "0");
+    const end = range[2].padStart(5, "0");
+    const startHour = Number(start.slice(0, 2));
+    const endHour = Number(end.slice(0, 2));
+    const examLike = /考试|准考证|分散|集中|闭卷|开卷/.test(input);
+    if (examLike && startHour < 10 && endHour - startHour > 4 && startHour + 10 < endHour) {
+      start = `${String(startHour + 10).padStart(2, "0")}${start.slice(2)}`;
+    }
+    return { start, end };
   }
 
   const hourRange = input.match(/([一二两三四五六七八九十]{1,3}|\d{1,2})\s*点\s*[-~至到]\s*([一二两三四五六七八九十]{1,3}|\d{1,2})\s*点?/);
@@ -246,7 +264,7 @@ function locationFrom(rawInput: string): string | undefined {
   const explicitField = input.match(/(?:地点|教室|考场|上课地点)\s*[:：]?\s*([^，。,.；;\n]+)/);
   if (explicitField) return explicitField[1].trim();
 
-  const namedLocation = input.match(/(?:教学楼|实验楼|综合楼|图书馆|体育馆|机房|教室|主楼|一教|二教|三教|四教|五教|逸夫楼|明德楼|笃行楼|博学楼|颐德楼|经世楼)\s*[\u4e00-\u9fa5A-Za-z0-9-]*/);
+  const namedLocation = input.match(/(?:教学楼|实验楼|综合楼|图书馆|体育馆|排球场|操场|运动场|晨曦排球场|机房|教室|主楼|一教|二教|三教|四教|五教|逸夫楼|明德楼|笃行楼|博学楼|颐德楼|经世楼)\s*[\u4e00-\u9fa5A-Za-z0-9-]*/);
   if (namedLocation) return namedLocation[0].trim();
 
   const roomCode = input.match(/\b[A-Za-z]-?\d{3,4}\b/);
@@ -369,13 +387,19 @@ function cleanExamTitle(input: string): string {
   cleaned = removeLiteral(cleaned, location)
     .replace(/^\s*\d{1,3}\s+/, " ")
     .replace(/20\d{2}\D{1,6}\d{1,2}\D{1,6}\d{1,2}\D?/g, " ")
+    .replace(/^[\s日号（）()]+/, " ")
+    .replace(/^\s*\d{1,3}\s+/, " ")
     .replace(/[（(]\s*\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}\s*[)）]/g, " ")
     .replace(/\d{1,2}:\d{2}\s*[-~至到]\s*\d{1,2}:\d{2}/g, " ")
+    .replace(/^[\s)）]+/, " ")
     .replace(/(?:考试科目|课程名称|考试日期|考试时间|考试地点|考场|地点|座位号?|座号|备注)/g, " ")
     .replace(/\b[A-Za-z]-?\d{3,4}\b/g, " ")
     .replace(/\b\d{1,3}\s*(?:分散|集中|闭卷|开卷)?\s*$/g, " ")
     .replace(/(?:分散|集中|闭卷|开卷)\s*$/g, " ")
+    .replace(/\(\s*c\s*语言\s*\)/gi, "（C语言）")
     .replace(/[:：]/g, " ")
+    .replace(/\s+([（])/g, "$1")
+    .replace(/([）])\s+/g, "$1")
     .replace(/\s+/g, " ")
     .trim();
 
@@ -449,7 +473,7 @@ export function localRecognize(
   intent: RecognitionIntent,
   source?: EventSource,
 ): { events: CampusEvent[]; unrecognizedItems: string[]; warnings: string[] } {
-  const routedIntent = intent === "AUTO" ? "NATURAL_LANGUAGE" : intent;
+  const routedIntent = intent === "AUTO" ? route(text) : intent;
   const eventSource = sourceFor(source, "TEXT");
   const normalizedText = normalizeInput(text);
   const warnings = ["当前使用本地规则识别；配置 AI key 可提升图片/PDF/复杂文本识别。"];
