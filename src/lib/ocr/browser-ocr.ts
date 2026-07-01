@@ -205,7 +205,12 @@ function scoreOcrText(value: string): number {
 
 async function fileHash(file: File): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const bytes = new Uint8Array(hash);
+  let result = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    result += bytes[index].toString(16).padStart(2, "0");
+  }
+  return result;
 }
 
 async function loadImage(file: File): Promise<HTMLImageElement> {
@@ -397,7 +402,14 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
       return count >= columnWidth * 0.85;
     });
     cellLines.push(bounds[0], bounds[bounds.length - 1]);
-    const sortedCellLines = [...new Set(cellLines)].sort((a, b) => a - b);
+    const seenCellLines = new Set<number>();
+    const sortedCellLines: number[] = [];
+    for (const line of cellLines) {
+      if (seenCellLines.has(line)) continue;
+      seenCellLines.add(line);
+      sortedCellLines.push(line);
+    }
+    sortedCellLines.sort((a, b) => a - b);
 
     for (let index = 0; index < sortedCellLines.length - 1; index += 1) {
       const y0 = sortedCellLines[index];

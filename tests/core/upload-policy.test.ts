@@ -6,6 +6,7 @@ const uploadPage = readFileSync("src/app/upload/page.tsx", "utf8");
 const uploadRoute = readFileSync("src/app/api/upload/route.ts", "utf8");
 const preprocessScript = readFileSync("src/lib/ocr/preprocess_timetable_image.py", "utf8");
 const browserOcr = readFileSync("src/lib/ocr/browser-ocr.ts", "utf8");
+const browserPdf = readFileSync("src/lib/pdf/browser-pdf.ts", "utf8");
 
 describe("mobile upload policy", () => {
   it("lets phone browsers pick images and supports WebP screenshots", () => {
@@ -64,10 +65,14 @@ describe("mobile upload policy", () => {
     assert.match(uploadPage, /没有识别到可生成的时间事件/);
   });
 
-  it("avoids newer array helpers in browser OCR for older mobile WebViews", () => {
-    assert.doesNotMatch(browserOcr, /\.flatMap\(/);
-    assert.doesNotMatch(browserOcr, /\.at\(/);
-    assert.doesNotMatch(browserOcr, /\.toSorted\(/);
-    assert.doesNotMatch(browserOcr, /\.findLast\(/);
+  it("avoids newer iterable helpers in browser OCR and PDF parsing for older mobile WebViews", () => {
+    for (const browserSource of [browserOcr, browserPdf]) {
+      assert.doesNotMatch(browserSource, /\.flatMap\(/);
+      assert.doesNotMatch(browserSource, /\.at\(/);
+      assert.doesNotMatch(browserSource, /\.toSorted\(/);
+      assert.doesNotMatch(browserSource, /\.findLast\(/);
+      assert.doesNotMatch(browserSource, /\.\.\.new Uint8Array/);
+      assert.doesNotMatch(browserSource, /\.\.\.new Set/);
+    }
   });
 });
