@@ -1,5 +1,7 @@
 ﻿import type { Metadata } from "next";
 import Link from "next/link";
+import Script from "next/script";
+import { MOBILE_POLYFILL_SCRIPT } from "@/lib/browser/mobile-polyfill-script";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -10,6 +12,14 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="zh-CN" data-scroll-behavior="smooth">
+      <head>
+        <Script
+          id="campusflow-mobile-polyfills"
+          strategy="beforeInteractive"
+        >
+          {MOBILE_POLYFILL_SCRIPT}
+        </Script>
+      </head>
       <body className="min-h-screen antialiased">
         <header className="sticky top-0 z-50 border-b border-emerald-100 bg-white/90 backdrop-blur">
           <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6 lg:px-8">

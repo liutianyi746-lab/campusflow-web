@@ -3,6 +3,8 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 const uploadPage = readFileSync("src/app/upload/page.tsx", "utf8");
+const rootLayout = readFileSync("src/app/layout.tsx", "utf8");
+const buildStaticScript = readFileSync("scripts/build-static.mjs", "utf8");
 const uploadRoute = readFileSync("src/app/api/upload/route.ts", "utf8");
 const preprocessScript = readFileSync("src/lib/ocr/preprocess_timetable_image.py", "utf8");
 const browserOcr = readFileSync("src/lib/ocr/browser-ocr.ts", "utf8");
@@ -78,11 +80,19 @@ describe("mobile upload policy", () => {
   });
 
   it("loads mobile WebView polyfills before upload parsing runs", () => {
+    assert.match(rootLayout, /MOBILE_POLYFILL_SCRIPT/);
+    assert.match(rootLayout, /campusflow-mobile-polyfills/);
+    assert.match(rootLayout, /<head>/);
+    assert.match(rootLayout, /next\/script/);
+    assert.match(rootLayout, /beforeInteractive/);
     assert.match(uploadPage, /@\/lib\/browser\/mobile-polyfills/);
     assert.match(mobilePolyfills, /Array\.prototype/);
     assert.match(mobilePolyfills, /"at"/);
     assert.match(mobilePolyfills, /"flatMap"/);
     assert.match(mobilePolyfills, /String\.prototype/);
     assert.match(mobilePolyfills, /"replaceAll"/);
+    assert.match(buildStaticScript, /injectMobilePolyfills/);
+    assert.match(buildStaticScript, /campusflow-mobile-polyfills/);
+    assert.match(buildStaticScript, /html\.replace\("<head>"/);
   });
 });
