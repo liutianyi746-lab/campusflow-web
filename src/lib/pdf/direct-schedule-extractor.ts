@@ -21,6 +21,13 @@ export type DirectScheduleExtraction = {
   semesterStart?: string | null;
 };
 
+export type DirectRawTextExtraction = {
+  success: true;
+  text: string;
+  mode: "text";
+  count: number;
+};
+
 const WEEKDAY_BY_HEADER = new Map([
   ["星期一", "周一"],
   ["星期二", "周二"],
@@ -48,6 +55,29 @@ function decodeUtf16Be(bytes: number[]): string {
     result += String.fromCharCode((bytes[index] << 8) | bytes[index + 1]);
   }
   return result;
+}
+
+function hexToBytes(hex: string): number[] {
+  const bytes: number[] = [];
+  for (let index = 0; index + 1 < hex.length; index += 2) {
+    bytes.push(Number.parseInt(hex.slice(index, index + 2), 16));
+  }
+  return bytes;
+}
+
+function decodeUtf16Hex(hex: string): string {
+  return decodeUtf16Be(hexToBytes(hex));
+}
+
+function decodeTextBytes(bytes: number[], unicodeMap: Map<number, string>): string {
+  if (!unicodeMap.size) return decodeUtf16Be(bytes);
+
+  let result = "";
+  for (let index = 0; index + 1 < bytes.length; index += 2) {
+    const code = (bytes[index] << 8) | bytes[index + 1];
+    result += unicodeMap.get(code) ?? "";
+  }
+  return result || decodeUtf16Be(bytes);
 }
 
 function bytesToBinaryString(bytes: Uint8Array): string {
@@ -177,9 +207,69 @@ function inflateStreams(buffer: Uint8Array): Uint8Array[] {
   return streams;
 }
 
-function extractPositionedTextFromStream(stream: Uint8Array): PositionedText[] {
+function parseToUnicodeMapFromStream(stream: Uint8Array): Map<number, string> {
   const source = bytesToBinaryString(stream);
-  const matches = [...source.matchAll(/1 0 0 1\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm/g)];
+  const map = new Map<number, string>();
+
+  const bfCharBlocks = source.match(/beginbfchar[\s\S]*?endbfchar/g) ?? [];
+  for (const block of bfCharBlocks) {
+    const matches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
+    for (const match of matches) {
+      map.set(Number.parseInt(match[1], 16), decodeUtf16Hex(match[2]));
+    }
+  }
+
+  const bfRangeBlocks = source.match(/beginbfrange[\s\S]*?endbfrange/g) ?? [];
+  for (const block of bfRangeBlocks) {
+    const arrayMatches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/g);
+    for (const match of arrayMatches) {
+      const start = Number.parseInt(match[1], 16);
+      const values = match[3].match(/<([0-9A-Fa-f]+)>/g) ?? [];
+      for (let offset = 0; offset < values.length; offset += 1) {
+        const value = values[offset].replace(/[<>]/g, "");
+        map.set(start + offset, decodeUtf16Hex(value));
+      }
+    }
+
+    const rangeMatches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
+    for (const match of rangeMatches) {
+      const start = Number.parseInt(match[1], 16);
+      const end = Number.parseInt(match[2], 16);
+      const targetBytes = hexToBytes(match[3]);
+      if (targetBytes.length !== 2) {
+        if (start === end) map.set(start, decodeUtf16Be(targetBytes));
+        continue;
+      }
+
+      const targetStart = (targetBytes[0] << 8) | targetBytes[1];
+      for (let code = start; code <= end; code += 1) {
+        map.set(code, String.fromCharCode(targetStart + code - start));
+      }
+    }
+  }
+
+  return map;
+}
+
+function buildToUnicodeMap(streams: Uint8Array[]): Map<number, string> {
+  const combined = new Map<number, string>();
+  for (const stream of streams) {
+    const streamMap = parseToUnicodeMapFromStream(stream);
+    for (const [code, value] of streamMap) {
+      combined.set(code, value);
+    }
+  }
+  return combined;
+}
+
+function extractPositionedTextFromStream(stream: Uint8Array, unicodeMap = new Map<number, string>()): PositionedText[] {
+  const source = bytesToBinaryString(stream);
+  const numberPattern = "-?\\d+(?:\\.\\d+)?";
+  const matrixPattern = new RegExp(
+    `${numberPattern}\\s+${numberPattern}\\s+${numberPattern}\\s+${numberPattern}\\s+(${numberPattern})\\s+(${numberPattern})\\s+Tm`,
+    "g",
+  );
+  const matches = [...source.matchAll(matrixPattern)];
   const items: PositionedText[] = [];
 
   for (let index = 0; index < matches.length; index += 1) {
@@ -198,7 +288,7 @@ function extractPositionedTextFromStream(stream: Uint8Array): PositionedText[] {
     const suffix = source.slice(literal.end, Math.min(literal.end + 12, source.length));
     if (!/^\s*Tj/.test(suffix)) continue;
 
-    const text = decodeUtf16Be(literal.bytes).trim();
+    const text = decodeTextBytes(literal.bytes, unicodeMap).trim();
     if (text) {
       items.push({
         text,
@@ -209,6 +299,55 @@ function extractPositionedTextFromStream(stream: Uint8Array): PositionedText[] {
   }
 
   return items;
+}
+
+function extractPositionedTextFromPdfContent(buffer: Uint8Array): PositionedText[] {
+  const items: PositionedText[] = [];
+  const streams = inflateStreams(buffer);
+  const unicodeMap = buildToUnicodeMap(streams);
+  for (const stream of streams) {
+    for (const item of extractPositionedTextFromStream(stream, unicodeMap)) {
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+function positionedItemsToLines(items: PositionedText[]): string[] {
+  const sorted = items
+    .filter((item) => displayClean(item.text))
+    .slice()
+    .sort((a, b) => b.y - a.y || a.x - b.x);
+  const lines: Array<{ y: number; items: PositionedText[] }> = [];
+
+  for (const item of sorted) {
+    let line = lines.find((candidate) => Math.abs(candidate.y - item.y) <= 4);
+    if (!line) {
+      line = { y: item.y, items: [] };
+      lines.push(line);
+    }
+    line.items.push(item);
+  }
+
+  return lines.map((line) => joinPositionedLine(line.items)).filter(Boolean);
+}
+
+function joinPositionedLine(items: PositionedText[]): string {
+  const sorted = items
+    .slice()
+    .sort((a, b) => a.x - b.x)
+    .map((item) => ({ ...item, text: displayClean(item.text) }))
+    .filter((item) => item.text);
+  let line = "";
+  let previousX: number | null = null;
+
+  for (const item of sorted) {
+    if (line && previousX !== null && item.x - previousX > 18) line += " ";
+    line += item.text;
+    previousX = item.x;
+  }
+
+  return line;
 }
 
 function closestWeekday(x: number, headers: PositionedText[]): string | undefined {
@@ -288,12 +427,7 @@ function inferSemesterStart(text: string): string | null {
 }
 
 export function extractScheduleFromPdfContent(buffer: Uint8Array): DirectScheduleExtraction | null {
-  const items: PositionedText[] = [];
-  for (const stream of inflateStreams(buffer)) {
-    for (const item of extractPositionedTextFromStream(stream)) {
-      items.push(item);
-    }
-  }
+  const items = extractPositionedTextFromPdfContent(buffer);
   if (!items.length) return null;
 
   const fullText = items.map((item) => item.text).join("\n");
@@ -317,5 +451,21 @@ export function extractScheduleFromPdfContent(buffer: Uint8Array): DirectSchedul
     mode: "table",
     count: deduped.length,
     semesterStart: inferSemesterStart(fullText),
+  };
+}
+
+export function extractRawTextFromPdfContent(buffer: Uint8Array): DirectRawTextExtraction | null {
+  const items = extractPositionedTextFromPdfContent(buffer);
+  if (!items.length) return null;
+
+  const lines = positionedItemsToLines(items);
+  const text = lines.join("\n").trim();
+  if (!text) return null;
+
+  return {
+    success: true,
+    text,
+    mode: "text",
+    count: lines.length,
   };
 }

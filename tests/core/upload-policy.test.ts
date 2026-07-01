@@ -77,9 +77,10 @@ describe("mobile upload policy", () => {
   });
 
   it("falls back to local PDF extraction when phone uploads time out", () => {
+    assert.match(uploadPage, /import \{ extractPdfInBrowser \} from "@\/lib\/pdf\/browser-pdf"/);
     assert.match(uploadPage, /isPdfUploadFile\(uploadFile\)/);
     assert.match(uploadPage, /extractPdfAfterUploadFailure/);
-    assert.match(uploadPage, /import\("@\/lib\/pdf\/browser-pdf"\)/);
+    assert.doesNotMatch(uploadPage, /import\("@\/lib\/pdf\/browser-pdf"\)/);
     assert.match(uploadPage, /网络上传不稳定，正在本地读取 PDF/);
     assert.match(browserPdf, /extractScheduleFromPdfContent/);
     assert.match(browserPdf, /正在本地读取 PDF 课表/);
