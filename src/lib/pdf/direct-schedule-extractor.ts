@@ -1,4 +1,4 @@
-import zlib from "node:zlib";
+import { decompressSync } from "fflate";
 
 type PositionedText = {
   text: string;
@@ -50,7 +50,44 @@ function decodeUtf16Be(bytes: number[]): string {
   return result;
 }
 
-function readLiteralString(buffer: Buffer, start: number): { bytes: number[]; end: number } | null {
+function bytesToBinaryString(bytes: Uint8Array): string {
+  const chunks: string[] = [];
+  const chunkSize = 0x8000;
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    let chunk = "";
+    const end = Math.min(bytes.length, index + chunkSize);
+    for (let cursor = index; cursor < end; cursor += 1) {
+      chunk += String.fromCharCode(bytes[cursor]);
+    }
+    chunks.push(chunk);
+  }
+  return chunks.join("");
+}
+
+function asciiBytes(value: string): Uint8Array {
+  const bytes = new Uint8Array(value.length);
+  for (let index = 0; index < value.length; index += 1) {
+    bytes[index] = value.charCodeAt(index);
+  }
+  return bytes;
+}
+
+function indexOfBytes(source: Uint8Array, needle: Uint8Array, from = 0): number {
+  if (!needle.length) return from;
+  for (let index = from; index <= source.length - needle.length; index += 1) {
+    let matched = true;
+    for (let offset = 0; offset < needle.length; offset += 1) {
+      if (source[index + offset] !== needle[offset]) {
+        matched = false;
+        break;
+      }
+    }
+    if (matched) return index;
+  }
+  return -1;
+}
+
+function readLiteralString(buffer: Uint8Array, start: number): { bytes: number[]; end: number } | null {
   if (buffer[start] !== 0x28) return null;
 
   const bytes: number[] = [];
@@ -110,25 +147,38 @@ function readLiteralString(buffer: Buffer, start: number): { bytes: number[]; en
   return null;
 }
 
-function inflateStreams(buffer: Buffer): Buffer[] {
-  const source = buffer.toString("latin1");
-  const streams: Buffer[] = [];
-  const pattern = /stream\r?\n([\s\S]*?)\r?\nendstream/g;
-  let match: RegExpExecArray | null;
+function inflateStreams(buffer: Uint8Array): Uint8Array[] {
+  const streams: Uint8Array[] = [];
+  const streamMarker = asciiBytes("stream");
+  const endstreamMarker = asciiBytes("endstream");
+  let cursor = 0;
 
-  while ((match = pattern.exec(source))) {
+  while (cursor < buffer.length) {
+    const streamStart = indexOfBytes(buffer, streamMarker, cursor);
+    if (streamStart < 0) break;
+    let dataStart = streamStart + streamMarker.length;
+    if (buffer[dataStart] === 0x0d && buffer[dataStart + 1] === 0x0a) dataStart += 2;
+    else if (buffer[dataStart] === 0x0a) dataStart += 1;
+
+    const streamEnd = indexOfBytes(buffer, endstreamMarker, dataStart);
+    if (streamEnd < 0) break;
+    let dataEnd = streamEnd;
+    if (buffer[dataEnd - 2] === 0x0d && buffer[dataEnd - 1] === 0x0a) dataEnd -= 2;
+    else if (buffer[dataEnd - 1] === 0x0a) dataEnd -= 1;
+
     try {
-      streams.push(zlib.inflateSync(Buffer.from(match[1], "latin1")));
+      streams.push(decompressSync(buffer.slice(dataStart, dataEnd)));
     } catch {
       // Non-Flate streams are not useful for the generated timetable PDFs we handle here.
     }
+    cursor = streamEnd + endstreamMarker.length;
   }
 
   return streams;
 }
 
-function extractPositionedTextFromStream(stream: Buffer): PositionedText[] {
-  const source = stream.toString("latin1");
+function extractPositionedTextFromStream(stream: Uint8Array): PositionedText[] {
+  const source = bytesToBinaryString(stream);
   const matches = [...source.matchAll(/1 0 0 1\s+(-?\d+(?:\.\d+)?)\s+(-?\d+(?:\.\d+)?)\s+Tm/g)];
   const items: PositionedText[] = [];
 
@@ -237,21 +287,27 @@ function inferSemesterStart(text: string): string | null {
   return date.toISOString().slice(0, 10);
 }
 
-export function extractScheduleFromPdfContent(buffer: Buffer): DirectScheduleExtraction | null {
-  const items = inflateStreams(buffer).flatMap(extractPositionedTextFromStream);
+export function extractScheduleFromPdfContent(buffer: Uint8Array): DirectScheduleExtraction | null {
+  const items: PositionedText[] = [];
+  for (const stream of inflateStreams(buffer)) {
+    for (const item of extractPositionedTextFromStream(stream)) {
+      items.push(item);
+    }
+  }
   if (!items.length) return null;
 
   const fullText = items.map((item) => item.text).join("\n");
   if (!fullText.includes("课表") || !fullText.includes("学期")) return null;
 
   const { entries, headers } = collectEntries(items);
-  const deduped = [
-    ...new Set(
-      entries
-        .map((entry) => entryToLine(entry, headers))
-        .filter((line): line is string => Boolean(line)),
-    ),
-  ];
+  const seenLines = new Set<string>();
+  const deduped: string[] = [];
+  for (const entry of entries) {
+    const line = entryToLine(entry, headers);
+    if (!line || seenLines.has(line)) continue;
+    seenLines.add(line);
+    deduped.push(line);
+  }
 
   if (!deduped.length) return null;
 

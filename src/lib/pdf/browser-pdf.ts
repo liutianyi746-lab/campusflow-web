@@ -1,4 +1,5 @@
 import type { BrowserOcrResult } from "@/lib/ocr/browser-ocr";
+import { extractScheduleFromPdfContent } from "@/lib/pdf/direct-schedule-extractor";
 
 type TextItem = {
   str?: string;
@@ -161,6 +162,21 @@ export async function extractPdfInBrowser(
   const inputHash = await fileHash(file);
 
   try {
+    onStatus?.("正在本地读取 PDF 课表...");
+    const data = new Uint8Array(await file.arrayBuffer());
+    const direct = extractScheduleFromPdfContent(data);
+    if (direct) {
+      return {
+        success: true,
+        ocrText: direct.text,
+        confidence: 0.95,
+        processingTimeMs: Date.now() - startedAt,
+        inputHash,
+        source: "PDF",
+        semesterStart: direct.semesterStart ?? undefined,
+      };
+    }
+
     onStatus?.("\u6b63\u5728\u52a0\u8f7d PDF \u89e3\u6790\u5668...");
     const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
     const base = assetBase();
@@ -168,7 +184,7 @@ export async function extractPdfInBrowser(
 
     onStatus?.("\u6b63\u5728\u8bfb\u53d6 PDF \u6587\u5b57...");
     const document = await pdfjs.getDocument({
-      data: new Uint8Array(await file.arrayBuffer()),
+      data,
       cMapUrl: `${base}/pdfjs/cmaps/`,
       cMapPacked: true,
     }).promise;

@@ -70,11 +70,19 @@ describe("mobile upload policy", () => {
 
   it("sends uploaded files to the backend instead of loading heavy browser OCR parsers", () => {
     assert.doesNotMatch(uploadPage, /recognizeImageInBrowser/);
-    assert.doesNotMatch(uploadPage, /extractPdfInBrowser/);
     assert.doesNotMatch(uploadPage, /USE_BROWSER_IMAGE_OCR/);
     assert.doesNotMatch(uploadPage, /USE_BROWSER_PDF_EXTRACTION/);
     assert.match(uploadPage, /fetch\(apiUrl\("\/api\/upload"\)/);
     assert.match(uploadPage, /formData\.append\("file", uploadFile\)/);
+  });
+
+  it("falls back to local PDF extraction when phone uploads time out", () => {
+    assert.match(uploadPage, /isPdfUploadFile\(uploadFile\)/);
+    assert.match(uploadPage, /extractPdfAfterUploadFailure/);
+    assert.match(uploadPage, /import\("@\/lib\/pdf\/browser-pdf"\)/);
+    assert.match(uploadPage, /网络上传不稳定，正在本地读取 PDF/);
+    assert.match(browserPdf, /extractScheduleFromPdfContent/);
+    assert.match(browserPdf, /正在本地读取 PDF 课表/);
   });
 
   it("times out backend uploads instead of leaving phones stuck reading sources", () => {
@@ -98,7 +106,8 @@ describe("mobile upload policy", () => {
   });
 
   it("avoids newer iterable helpers in browser OCR and PDF parsing for older mobile WebViews", () => {
-    for (const browserSource of [browserOcr, browserPdf]) {
+    const directPdf = readFileSync("src/lib/pdf/direct-schedule-extractor.ts", "utf8");
+    for (const browserSource of [browserOcr, browserPdf, directPdf]) {
       assert.doesNotMatch(browserSource, /\.flatMap\(/);
       assert.doesNotMatch(browserSource, /\.at\(/);
       assert.doesNotMatch(browserSource, /\.toSorted\(/);
