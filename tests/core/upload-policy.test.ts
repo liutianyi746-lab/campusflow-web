@@ -68,6 +68,15 @@ describe("mobile upload policy", () => {
     assert.match(uploadPage, /没有识别到可生成的时间事件/);
   });
 
+  it("sends uploaded files to the backend instead of loading heavy browser OCR parsers", () => {
+    assert.doesNotMatch(uploadPage, /recognizeImageInBrowser/);
+    assert.doesNotMatch(uploadPage, /extractPdfInBrowser/);
+    assert.doesNotMatch(uploadPage, /USE_BROWSER_IMAGE_OCR/);
+    assert.doesNotMatch(uploadPage, /USE_BROWSER_PDF_EXTRACTION/);
+    assert.match(uploadPage, /fetch\(apiUrl\("\/api\/upload"\)/);
+    assert.match(uploadPage, /formData\.append\("file", uploadFile\)/);
+  });
+
   it("avoids newer iterable helpers in browser OCR and PDF parsing for older mobile WebViews", () => {
     for (const browserSource of [browserOcr, browserPdf]) {
       assert.doesNotMatch(browserSource, /\.flatMap\(/);
