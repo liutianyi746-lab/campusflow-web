@@ -77,6 +77,20 @@ describe("mobile upload policy", () => {
     assert.match(uploadPage, /formData\.append\("file", uploadFile\)/);
   });
 
+  it("times out backend uploads instead of leaving phones stuck reading sources", () => {
+    assert.match(uploadPage, /UPLOAD_TIMEOUT_MS\s*=\s*45000/);
+    assert.match(uploadPage, /new AbortController\(\)/);
+    assert.match(uploadPage, /signal:\s*controller\.signal/);
+    assert.match(uploadPage, /读取来源超时/);
+  });
+
+  it("never returns canned OCR samples for PDFs that should be handled by the PDF extractor", () => {
+    const ocrStub = readFileSync("src/lib/ocr/paddle-ocr-stub.ts", "utf8");
+    assert.doesNotMatch(uploadRoute, /recognize\(buffer,[\s\S]*application\/pdf/);
+    assert.doesNotMatch(ocrStub, /EXAM_SAMPLE/);
+    assert.match(ocrStub, /PDF 应由 PDF 抽取器处理/);
+  });
+
   it("avoids newer iterable helpers in browser OCR and PDF parsing for older mobile WebViews", () => {
     for (const browserSource of [browserOcr, browserPdf]) {
       assert.doesNotMatch(browserSource, /\.flatMap\(/);

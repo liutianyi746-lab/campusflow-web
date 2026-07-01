@@ -23,10 +23,6 @@ const SCHEDULE_SAMPLE = `学校作息时间表
 11 20:50 21:35
 12 21:45 22:30`;
 
-const EXAM_SAMPLE = `考试安排
-数据结构 2026-06-20 15:00-17:00 教学楼 A301
-大学英语 2026-06-24 09:00-11:00 教学楼 B205`;
-
 const HOMEWORK_SAMPLE = `作业通知
 请在 6月20日 23:59 前提交课程设计报告。课程：数据结构课程设计`;
 
@@ -40,7 +36,6 @@ type RecognizeOptions = {
 
 function sampleFor(fileType?: string, options: RecognizeOptions = {}): string {
   if (options.purpose === "schedule") return SCHEDULE_SAMPLE;
-  if (fileType?.includes("pdf")) return EXAM_SAMPLE;
   if (fileType?.includes("sheet") || fileType?.includes("excel")) return COURSE_SAMPLE;
   if (fileType?.includes("csv")) return COURSE_SAMPLE;
   if (fileType?.includes("homework")) return HOMEWORK_SAMPLE;
@@ -75,6 +70,18 @@ export async function recognize(buffer: Buffer, fileType?: string, options: Reco
       inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
       source: "IMAGE" as EventSource,
       error: imageResult.error ?? "图片 OCR 未识别到有效文本，请尝试裁剪课表区域后重新上传。",
+    };
+  }
+
+  if (fileType?.includes("pdf")) {
+    return {
+      success: false,
+      ocrText: "",
+      confidence: 0,
+      processingTimeMs: Date.now() - startedAt,
+      inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
+      source: "PDF" as EventSource,
+      error: "PDF 应由 PDF 抽取器处理，未返回示例识别结果。",
     };
   }
 
