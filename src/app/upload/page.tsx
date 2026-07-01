@@ -7,6 +7,7 @@ import { StepIndicator } from "@/app/_components/step-indicator";
 import { useEventStore } from "@/stores/use-event-store";
 import { useStepStore } from "@/stores/use-step-store";
 import { apiUrl } from "@/lib/http/api-client";
+import { extractPdfInBrowser } from "@/lib/pdf/browser-pdf";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
@@ -150,7 +151,6 @@ async function uploadFileToBackend(formData: FormData) {
 
 async function extractPdfAfterUploadFailure(file: File, onStatus: (status: string) => void) {
   onStatus("网络上传不稳定，正在本地读取 PDF...");
-  const { extractPdfInBrowser } = await import("@/lib/pdf/browser-pdf");
   const result = await extractPdfInBrowser(file, onStatus);
   return { success: true, data: result };
 }

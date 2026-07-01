@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { extractScheduleFromPdfContent } from "./direct-schedule-extractor.ts";
+import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "./direct-schedule-extractor.ts";
 import { extractPdfTextWithPdfJs } from "./pdfjs-fallback-extractor.ts";
 
 const execFileAsync = promisify(execFile);
@@ -95,6 +95,9 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfTextExtraction 
   const startedAt = Date.now();
   const direct = extractionToResult(extractScheduleFromPdfContent(buffer) ?? {}, buffer, startedAt);
   if (direct) return direct;
+
+  const raw = extractionToResult(extractRawTextFromPdfContent(buffer) ?? {}, buffer, startedAt);
+  if (raw) return raw;
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "campusflow-pdf-"));
   const pdfPath = path.join(dir, "input.pdf");

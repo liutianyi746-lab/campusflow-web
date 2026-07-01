@@ -4,7 +4,7 @@ import { describe, it } from "node:test";
 
 import { applyTemplate } from "../../src/lib/parser/template-matcher.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
-import { extractScheduleFromPdfContent } from "../../src/lib/pdf/direct-schedule-extractor.ts";
+import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "../../src/lib/pdf/direct-schedule-extractor.ts";
 import { extractPdfText } from "../../src/lib/pdf/pdf-text-extractor.ts";
 import { extractPdfTextWithPdfJs } from "../../src/lib/pdf/pdfjs-fallback-extractor.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
@@ -57,5 +57,22 @@ describe("pdf schedule extraction", () => {
     assert.equal(extracted.count, 14);
     assert.match(extracted.text, /周四 3-4节 数字经济 姚凯老师 颐德楼H212 1-17周/);
     assert.match(extracted.text, /周五 5-6节 概率论与数理统计B 郭斌,张晨琳老师 经世楼G101 1-17周/);
+  });
+
+  it("extracts exam admission-ticket text without PDF.js dynamic loading", async () => {
+    const pdfPath = "C:/Users/32916/Documents/xwechat_files/wxid_mjn1s6jfsbqz22_fa4f/msg/file/2026-06/ReportServer.pdf";
+    if (!existsSync(pdfPath)) return;
+
+    const extracted = extractRawTextFromPdfContent(readFileSync(pdfPath));
+
+    assert.ok(extracted);
+    assert.match(extracted.text, /西南财经大学2025-2026-2学期期末考试准考证/);
+    assert.match(extracted.text, /2026年06月23日\(13:00-15:00\) 数据结构（C语言） 经世楼E202 57/);
+    assert.match(extracted.text, /2026年07月02日\(09:00-11:00\) 高等数学(?:II|Ⅱ) 经世楼B404 17/);
+
+    const recognized = localRecognize(extracted.text, "EXAM", "PDF");
+    assert.equal(recognized.events.length, 7);
+    assert.equal(recognized.events[0].title, "数据结构（C语言）考试");
+    assert.equal(recognized.events[0].seatNumber, "57");
   });
 });

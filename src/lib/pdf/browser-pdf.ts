@@ -1,5 +1,5 @@
 import type { BrowserOcrResult } from "@/lib/ocr/browser-ocr";
-import { extractScheduleFromPdfContent } from "@/lib/pdf/direct-schedule-extractor";
+import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "@/lib/pdf/direct-schedule-extractor";
 
 type TextItem = {
   str?: string;
@@ -174,6 +174,18 @@ export async function extractPdfInBrowser(
         inputHash,
         source: "PDF",
         semesterStart: direct.semesterStart ?? undefined,
+      };
+    }
+
+    const raw = extractRawTextFromPdfContent(data);
+    if (raw) {
+      return {
+        success: true,
+        ocrText: raw.text,
+        confidence: 0.78,
+        processingTimeMs: Date.now() - startedAt,
+        inputHash,
+        source: "PDF",
       };
     }
 
