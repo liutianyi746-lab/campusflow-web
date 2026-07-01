@@ -7,6 +7,7 @@ const uploadRoute = readFileSync("src/app/api/upload/route.ts", "utf8");
 const preprocessScript = readFileSync("src/lib/ocr/preprocess_timetable_image.py", "utf8");
 const browserOcr = readFileSync("src/lib/ocr/browser-ocr.ts", "utf8");
 const browserPdf = readFileSync("src/lib/pdf/browser-pdf.ts", "utf8");
+const mobilePolyfills = readFileSync("src/lib/browser/mobile-polyfills.ts", "utf8");
 
 describe("mobile upload policy", () => {
   it("lets phone browsers pick images and supports WebP screenshots", () => {
@@ -74,5 +75,14 @@ describe("mobile upload policy", () => {
       assert.doesNotMatch(browserSource, /\.\.\.new Uint8Array/);
       assert.doesNotMatch(browserSource, /\.\.\.new Set/);
     }
+  });
+
+  it("loads mobile WebView polyfills before upload parsing runs", () => {
+    assert.match(uploadPage, /@\/lib\/browser\/mobile-polyfills/);
+    assert.match(mobilePolyfills, /Array\.prototype/);
+    assert.match(mobilePolyfills, /"at"/);
+    assert.match(mobilePolyfills, /"flatMap"/);
+    assert.match(mobilePolyfills, /String\.prototype/);
+    assert.match(mobilePolyfills, /"replaceAll"/);
   });
 });

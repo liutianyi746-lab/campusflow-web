@@ -1,5 +1,6 @@
 "use client";
 
+import "@/lib/browser/mobile-polyfills";
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StepIndicator } from "@/app/_components/step-indicator";
