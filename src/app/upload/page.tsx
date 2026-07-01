@@ -33,7 +33,7 @@ const IMAGE_FILE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp";
 const PDF_FILE_ACCEPT = ".pdf,application/pdf";
 const EXCEL_FILE_ACCEPT = ".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 const TEXT_FILE_ACCEPT = ".txt,text/plain";
-const UPLOAD_TIMEOUT_MS = 45000;
+const UPLOAD_TIMEOUT_MS = 120000;
 
 function fileExtension(file: File): string {
   return file.name.toLowerCase().split(".").pop() ?? "";
@@ -136,7 +136,7 @@ async function uploadFileToBackend(formData: FormData) {
     return await response.json();
   } catch (error) {
     if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("读取来源超时，请检查网络后重试，或改用文本输入。");
+      throw new Error("读取来源超时，请检查网络后重试，或改用文本输入。手机网络上传图片可能需要 1-2 分钟。");
     }
     throw error;
   } finally {
