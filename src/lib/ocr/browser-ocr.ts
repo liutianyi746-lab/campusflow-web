@@ -557,19 +557,25 @@ function isUsefulCourseCellText(text: string): boolean {
 }
 
 function composeCellLines(cells: Array<{ variant: CanvasVariant; text: string }>): string {
-  return cells
-    .flatMap(({ variant, text }) => {
-      const cleaned = compactRecognizedText(text);
-      if (!variant.dayOfWeek || !variant.periodStart || !variant.periodEnd || !isUsefulCourseCellText(cleaned)) return [];
-      const weekday = WEEKDAY_LABELS[variant.dayOfWeek - 1] ?? String(variant.dayOfWeek);
-      const canonical = matchingCanonicalCourses(variant, cleaned);
-      if (canonical.length) {
-        return canonical.map((course) => `周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${canonicalLine(course)}`);
+  const lines: string[] = [];
+
+  for (const { variant, text } of cells) {
+    const cleaned = compactRecognizedText(text);
+    if (!variant.dayOfWeek || !variant.periodStart || !variant.periodEnd || !isUsefulCourseCellText(cleaned)) continue;
+
+    const weekday = WEEKDAY_LABELS[variant.dayOfWeek - 1] ?? String(variant.dayOfWeek);
+    const canonical = matchingCanonicalCourses(variant, cleaned);
+    if (canonical.length) {
+      for (const course of canonical) {
+        lines.push(`周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${canonicalLine(course)}`);
       }
-      return [`周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${fallbackCellText(cleaned)}`];
-    })
-    .filter(Boolean)
-    .join("\n");
+      continue;
+    }
+
+    lines.push(`周${weekday} ${variant.periodStart}-${variant.periodEnd}节 ${fallbackCellText(cleaned)}`);
+  }
+
+  return lines.join("\n");
 }
 
 function statusFor(variant: CanvasVariant): string {
