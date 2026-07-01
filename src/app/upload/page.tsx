@@ -67,6 +67,10 @@ function shouldPrepareAsImage(file: File): boolean {
   return file.type.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(extension);
 }
 
+function isPdfUploadFile(file: File): boolean {
+  return file.type === "application/pdf" || fileExtension(file) === "pdf";
+}
+
 async function convertImageToJpeg(file: File): Promise<File> {
   const objectUrl = URL.createObjectURL(file);
 
@@ -142,6 +146,13 @@ async function uploadFileToBackend(formData: FormData) {
   } finally {
     window.clearTimeout(timeoutId);
   }
+}
+
+async function extractPdfAfterUploadFailure(file: File, onStatus: (status: string) => void) {
+  onStatus("网络上传不稳定，正在本地读取 PDF...");
+  const { extractPdfInBrowser } = await import("@/lib/pdf/browser-pdf");
+  const result = await extractPdfInBrowser(file, onStatus);
+  return { success: true, data: result };
 }
 
 const SOURCE_PRESETS: Array<{
@@ -349,7 +360,10 @@ export default function UploadPage() {
         formData.append("file", uploadFile);
         if (isScheduleMode) formData.append("purpose", "schedule");
 
-        const uploadResponse = await uploadFileToBackend(formData);
+        const uploadResponse = await uploadFileToBackend(formData).catch((uploadError) => {
+          if (isPdfUploadFile(uploadFile)) return extractPdfAfterUploadFailure(uploadFile, setStatus);
+          throw uploadError;
+        });
 
         if (!uploadResponse.success) {
           throw new Error(uploadResponse.error?.message ?? "文件上传失败");
