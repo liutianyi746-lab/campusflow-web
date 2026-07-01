@@ -78,10 +78,16 @@ describe("mobile upload policy", () => {
   });
 
   it("times out backend uploads instead of leaving phones stuck reading sources", () => {
-    assert.match(uploadPage, /UPLOAD_TIMEOUT_MS\s*=\s*45000/);
+    assert.match(uploadPage, /UPLOAD_TIMEOUT_MS\s*=\s*120000/);
     assert.match(uploadPage, /new AbortController\(\)/);
     assert.match(uploadPage, /signal:\s*controller\.signal/);
     assert.match(uploadPage, /读取来源超时/);
+  });
+
+  it("keeps server image OCR enabled for deployed phone uploads", () => {
+    const imageOcr = readFileSync("src/lib/ocr/image-ocr.ts", "utf8");
+    assert.doesNotMatch(imageOcr, /线上图片识别已切换为浏览器端 OCR/);
+    assert.doesNotMatch(imageOcr, /process\.env\.VERCEL[\s\S]*CAMPUSFLOW_SERVER_IMAGE_OCR/);
   });
 
   it("never returns canned OCR samples for PDFs that should be handled by the PDF extractor", () => {

@@ -432,18 +432,6 @@ export async function recognizeImage(buffer: Buffer, fileType?: string): Promise
   try {
     await writeFile(imagePath, buffer);
 
-    if (process.env.VERCEL === "1" && process.env.CAMPUSFLOW_SERVER_IMAGE_OCR !== "true") {
-      return {
-        success: false,
-        ocrText: "",
-        confidence: 0,
-        processingTimeMs: Date.now() - startedAt,
-        inputHash,
-        source: "IMAGE",
-        error: "线上图片识别已切换为浏览器端 OCR，请刷新页面后重新上传。",
-      };
-    }
-
     if (process.platform !== "win32" || process.env.CAMPUSFLOW_PORTABLE_OCR_ONLY === "true") {
       const portable = await runPortableOcr(imagePath, dir);
       return {
