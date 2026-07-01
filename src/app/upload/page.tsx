@@ -7,8 +7,6 @@ import { StepIndicator } from "@/app/_components/step-indicator";
 import { useEventStore } from "@/stores/use-event-store";
 import { useStepStore } from "@/stores/use-step-store";
 import { apiUrl } from "@/lib/http/api-client";
-import { recognizeImageInBrowser } from "@/lib/ocr/browser-ocr";
-import { extractPdfInBrowser } from "@/lib/pdf/browser-pdf";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
@@ -35,8 +33,6 @@ const IMAGE_FILE_ACCEPT = "image/*,.jpg,.jpeg,.png,.webp";
 const PDF_FILE_ACCEPT = ".pdf,application/pdf";
 const EXCEL_FILE_ACCEPT = ".xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv";
 const TEXT_FILE_ACCEPT = ".txt,text/plain";
-const USE_BROWSER_IMAGE_OCR = Boolean(process.env.NEXT_PUBLIC_API_BASE_URL);
-const USE_BROWSER_PDF_EXTRACTION = Boolean(process.env.NEXT_PUBLIC_API_BASE_URL);
 
 function fileExtension(file: File): string {
   return file.name.toLowerCase().split(".").pop() ?? "";
@@ -68,10 +64,6 @@ function uploadAcceptForPreset(presetId: string): string {
 function shouldPrepareAsImage(file: File): boolean {
   const extension = fileExtension(file);
   return file.type.startsWith("image/") || ["jpg", "jpeg", "png", "webp", "heic", "heif"].includes(extension);
-}
-
-function shouldExtractPdfInBrowser(file: File): boolean {
-  return file.type === "application/pdf" || fileExtension(file) === "pdf";
 }
 
 async function convertImageToJpeg(file: File): Promise<File> {
@@ -331,26 +323,14 @@ export default function UploadPage() {
         setImageUrl(prepared.previewUrl);
         setStatus(isScheduleMode ? "正在读取作息表..." : "正在读取来源...");
 
-        const uploadResponse = USE_BROWSER_IMAGE_OCR && shouldPrepareAsImage(uploadFile)
-          ? {
-              success: true,
-              data: await recognizeImageInBrowser(uploadFile, setStatus),
-            }
-          : USE_BROWSER_PDF_EXTRACTION && shouldExtractPdfInBrowser(uploadFile)
-            ? {
-                success: true,
-                data: await extractPdfInBrowser(uploadFile, setStatus),
-              }
-          : await (async () => {
-              const formData = new FormData();
-              formData.append("file", uploadFile);
-              if (isScheduleMode) formData.append("purpose", "schedule");
+        const formData = new FormData();
+        formData.append("file", uploadFile);
+        if (isScheduleMode) formData.append("purpose", "schedule");
 
-              return fetch(apiUrl("/api/upload"), {
-                method: "POST",
-                body: formData,
-              }).then((response) => response.json());
-            })();
+        const uploadResponse = await fetch(apiUrl("/api/upload"), {
+          method: "POST",
+          body: formData,
+        }).then((response) => response.json());
 
         if (!uploadResponse.success) {
           throw new Error(uploadResponse.error?.message ?? "文件上传失败");
