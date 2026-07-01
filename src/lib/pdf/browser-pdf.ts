@@ -69,7 +69,12 @@ function displayClean(value: string): string {
 
 async function fileHash(file: File): Promise<string> {
   const hash = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
-  return [...new Uint8Array(hash)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+  const bytes = new Uint8Array(hash);
+  let result = "";
+  for (let index = 0; index < bytes.length; index += 1) {
+    result += bytes[index].toString(16).padStart(2, "0");
+  }
+  return result;
 }
 
 function itemToPositioned(item: TextItem): PositionedText | undefined {
@@ -97,7 +102,7 @@ function closestWeekday(axis: number, headers: WeekdayHeader[]): string | undefi
 function collectEntries(items: PositionedText[], headers: WeekdayHeader[]): CourseEntry[] {
   const entries: CourseEntry[] = [];
   const activeByAxis = new Map<string, CourseEntry>();
-  const sorted = [...items].sort((a, b) => a.x - b.x || a.y - b.y);
+  const sorted = items.slice().sort((a, b) => a.x - b.x || a.y - b.y);
 
   for (const item of sorted) {
     if (item.text.includes("▲")) {
@@ -180,18 +185,28 @@ export async function extractPdfInBrowser(
         .filter((item): item is PositionedText => Boolean(item));
 
       fallbackText.push(items.map((item) => item.text).join("\n"));
-      headers.push(
-        ...items
-          .filter((item) => WEEKDAY_BY_HEADER.has(item.text))
-          .map((item) => ({ label: item.text, axis: item.y })),
-      );
-      entries.push(...collectEntries(items, headers));
+      for (const item of items) {
+        if (WEEKDAY_BY_HEADER.has(item.text)) {
+          headers.push({ label: item.text, axis: item.y });
+        }
+      }
+
+      const pageEntries = collectEntries(items, headers);
+      for (const entry of pageEntries) {
+        entries.push(entry);
+      }
     }
 
     const lines = entries
       .map((entry) => entryToLine(entry, headers))
       .filter((line): line is string => Boolean(line));
-    const deduped = [...new Set(lines)];
+    const seenLines = new Set<string>();
+    const deduped: string[] = [];
+    for (const line of lines) {
+      if (seenLines.has(line)) continue;
+      seenLines.add(line);
+      deduped.push(line);
+    }
     const rawText = fallbackText.join("\n").trim();
     const ocrText = deduped.length ? `\u8bfe\u7a0b\u8868\n${deduped.join("\n")}` : rawText;
 
