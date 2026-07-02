@@ -1,4 +1,5 @@
-﻿import { create } from "zustand";
+import { create } from "zustand";
+import { DEFAULT_NO_CLASS_DATES, normalizeNoClassDates } from "@/lib/calendar/no-class-dates";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "@/lib/schedule/default-template";
 import { DEFAULT_SEMESTER_START, normalizeSemesterStart } from "@/lib/semester/default-semester";
 import type { CampusEvent, ScheduleTemplate } from "@/lib/types/campus-event";
@@ -8,6 +9,7 @@ interface EventStore {
   selectedIds: Set<string>;
   scheduleTemplate: ScheduleTemplate;
   semesterStart: string;
+  noClassDates: string[];
   setEvents: (events: CampusEvent[]) => void;
   appendEvents: (events: CampusEvent[]) => void;
   updateEvent: (id: string, patch: Partial<CampusEvent>) => void;
@@ -16,6 +18,9 @@ interface EventStore {
   selectAll: () => void;
   clearSelection: () => void;
   setSemesterStart: (date: string) => void;
+  addNoClassDate: (date: string) => void;
+  removeNoClassDate: (date: string) => void;
+  resetNoClassDates: () => void;
   setScheduleTemplate: (template: ScheduleTemplate) => void;
   resetScheduleTemplate: () => void;
   reset: () => void;
@@ -26,6 +31,7 @@ export const useEventStore = create<EventStore>((set) => ({
   selectedIds: new Set(),
   scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE,
   semesterStart: DEFAULT_SEMESTER_START,
+  noClassDates: DEFAULT_NO_CLASS_DATES,
   setEvents: (events) => set({ events, selectedIds: new Set(events.map((event) => event.id)) }),
   appendEvents: (events) =>
     set((state) => {
@@ -55,6 +61,11 @@ export const useEventStore = create<EventStore>((set) => ({
   selectAll: () => set((state) => ({ selectedIds: new Set(state.events.map((event) => event.id)) })),
   clearSelection: () => set({ selectedIds: new Set() }),
   setSemesterStart: (date) => set({ semesterStart: normalizeSemesterStart(date) }),
+  addNoClassDate: (date) =>
+    set((state) => ({ noClassDates: normalizeNoClassDates([...state.noClassDates, date]) })),
+  removeNoClassDate: (date) =>
+    set((state) => ({ noClassDates: state.noClassDates.filter((item) => item !== date) })),
+  resetNoClassDates: () => set({ noClassDates: DEFAULT_NO_CLASS_DATES }),
   setScheduleTemplate: (template) => set({ scheduleTemplate: template }),
   resetScheduleTemplate: () => set({ scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE }),
   reset: () =>
@@ -63,5 +74,6 @@ export const useEventStore = create<EventStore>((set) => ({
       selectedIds: new Set(),
       scheduleTemplate: DEFAULT_SCHEDULE_TEMPLATE,
       semesterStart: DEFAULT_SEMESTER_START,
+      noClassDates: DEFAULT_NO_CLASS_DATES,
     }),
 }));

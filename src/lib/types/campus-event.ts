@@ -110,6 +110,7 @@ export interface IcsRequest {
   semesterStart: string;
   calendarName: string;
   periods?: Period[];
+  noClassDates?: string[];
 }
 
 export type LegacyCourseEvent = CourseFields & {
