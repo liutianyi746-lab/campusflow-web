@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
       events?: CampusEvent[];
       semesterStart?: string;
       periods?: Period[];
+      noClassDates?: string[];
       calendarName?: string;
     };
 
@@ -35,6 +36,7 @@ export async function POST(req: NextRequest) {
       normalizeSemesterStart(body.semesterStart),
       calendarName,
       body.periods?.length ? body.periods : undefined,
+      body.noClassDates,
     );
 
     return withCors(

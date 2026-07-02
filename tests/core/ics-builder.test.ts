@@ -52,6 +52,40 @@ describe("ics builder", () => {
     assert.match(ics, /座位号: 57/);
     assert.match(ics, /TRIGGER:-PT60M/);
   });
+
+  it("excludes course occurrences that land on no-class holiday dates", () => {
+    const ics = buildIcs(
+      [
+        {
+          id: "course-holiday",
+          title: "数字经济",
+          type: "COURSE",
+          source: "PDF",
+          confidence: 0.95,
+          reminderMinutes: 10,
+          weekType: "EVERY_WEEK",
+          course: {
+            courseName: "数字经济",
+            teacher: "姚凯",
+            classroom: "颐德楼H212",
+            dayOfWeek: 5,
+            periodStart: 1,
+            periodEnd: 2,
+            weekStart: 1,
+            weekEnd: 5,
+            weekType: "EVERY_WEEK",
+          },
+        },
+      ],
+      "2026-09-07",
+      "CampusFlow 测试日历",
+      undefined,
+      ["2026-09-25", "2026-10-02"],
+    );
+
+    assert.match(ics, /RRULE:FREQ=WEEKLY;INTERVAL=1/);
+    assert.match(ics, /EXDATE:20260925T080000,20261002T080000/);
+  });
 });
 
 

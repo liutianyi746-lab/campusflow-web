@@ -1,4 +1,5 @@
 import type { CampusEvent, LegacyCourseEvent, Period } from "../types/campus-event.ts";
+import { DEFAULT_NO_CLASS_DATES, normalizeNoClassDates } from "../calendar/no-class-dates.ts";
 import { expandWeekNumbers, resolveCourseDateTime } from "../events/week-engine.ts";
 import { DEFAULT_PERIODS } from "../schedule/default-template.ts";
 
@@ -88,44 +89,49 @@ function rruleForCourse(
   event: CampusEvent,
   semesterStart: string,
   periods: Period[],
-): { start: Date; end: Date; rrule: string | null }[] {
+  noClassDates: Set<string>,
+): { start: Date; end: Date; rrule: string | null; exDates?: Date[] }[] {
   if (!event.course) return [];
 
   const weeks = expandWeekNumbers(event.course);
   if (!weeks.length) return [];
 
   if (event.course.weekType === "SPECIFIC_WEEKS") {
-    return weeks.map((week) => ({
-      ...resolveCourseDateTime({
+    const specificOccurrences: { start: Date; end: Date; rrule: string | null }[] = [];
+    for (const week of weeks) {
+      const occurrence = resolveCourseDateTime({
         semesterStart,
         dayOfWeek: event.course!.dayOfWeek,
         week,
         periodStart: event.course!.periodStart,
         periodEnd: event.course!.periodEnd,
         periods,
-      }),
-      rrule: null,
-    }));
+      });
+      if (!noClassDates.has(occurrence.date)) {
+        specificOccurrences.push({ ...occurrence, rrule: null });
+      }
+    }
+    return specificOccurrences;
   }
 
-  const firstWeek = weeks[0];
-  const lastWeek = weeks[weeks.length - 1];
-  const first = resolveCourseDateTime({
-    semesterStart,
-    dayOfWeek: event.course.dayOfWeek,
-    week: firstWeek,
-    periodStart: event.course.periodStart,
-    periodEnd: event.course.periodEnd,
-    periods,
-  });
-  const last = resolveCourseDateTime({
-    semesterStart,
-    dayOfWeek: event.course.dayOfWeek,
-    week: lastWeek,
-    periodStart: event.course.periodStart,
-    periodEnd: event.course.periodEnd,
-    periods,
-  });
+  const occurrences = weeks.map((week) =>
+    resolveCourseDateTime({
+      semesterStart,
+      dayOfWeek: event.course!.dayOfWeek,
+      week,
+      periodStart: event.course!.periodStart,
+      periodEnd: event.course!.periodEnd,
+      periods,
+    }),
+  );
+  const activeOccurrences = occurrences.filter((occurrence) => !noClassDates.has(occurrence.date));
+  if (!activeOccurrences.length) return [];
+
+  const first = activeOccurrences[0];
+  const last = activeOccurrences[activeOccurrences.length - 1];
+  const exDates = occurrences
+    .filter((occurrence) => noClassDates.has(occurrence.date))
+    .map((occurrence) => occurrence.start);
   const interval = event.course.weekType === "EVERY_WEEK" ? 1 : 2;
 
   return [
@@ -133,6 +139,7 @@ function rruleForCourse(
       start: first.start,
       end: first.end,
       rrule: `FREQ=WEEKLY;INTERVAL=${interval};UNTIL=${normalizeDateTime(last.end)}`,
+      exDates,
     },
   ];
 }
@@ -156,6 +163,7 @@ function vevent(input: {
   end: string | Date;
   uidSuffix?: string;
   rrule?: string | null;
+  exDates?: Date[];
 }): string[] {
   const reminder = input.event.reminderMinutes ?? 10;
   const lines = [
@@ -174,6 +182,9 @@ function vevent(input: {
   if (description) lines.push(`DESCRIPTION:${escapeIcsText(description)}`);
 
   if (input.rrule) lines.push(`RRULE:${input.rrule}`);
+  if (input.exDates?.length) {
+    lines.push(`EXDATE:${input.exDates.map((date) => normalizeDateTime(date)).join(",")}`);
+  }
 
   if (reminder > 0) {
     lines.push(
@@ -194,7 +205,9 @@ export function buildIcs(
   semesterStart: string,
   calendarName: string,
   periods: Period[] = DEFAULT_PERIODS,
+  noClassDates: string[] = DEFAULT_NO_CLASS_DATES,
 ): string {
+  const normalizedNoClassDates = new Set(normalizeNoClassDates(noClassDates));
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
@@ -208,7 +221,7 @@ export function buildIcs(
   for (const rawEvent of rawEvents) {
     const event = normalizeEvent(rawEvent);
     if (event.type === "COURSE" && event.course) {
-      const occurrences = rruleForCourse(event, semesterStart, periods);
+      const occurrences = rruleForCourse(event, semesterStart, periods, normalizedNoClassDates);
       occurrences.forEach((occurrence, index) => {
         lines.push(
           ...vevent({
@@ -217,6 +230,7 @@ export function buildIcs(
             end: occurrence.end,
             uidSuffix: String(index + 1),
             rrule: occurrence.rrule,
+            exDates: occurrence.exDates,
           }),
         );
       });

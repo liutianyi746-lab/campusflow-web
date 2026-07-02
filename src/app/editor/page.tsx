@@ -352,8 +352,24 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
 
 export default function EditorPage() {
   const router = useRouter();
-  const { events, selectedIds, scheduleTemplate, semesterStart, setSemesterStart, toggleSelect, selectAll, removeEvent, appendEvents, updateEvent } = useEventStore();
+  const {
+    events,
+    selectedIds,
+    scheduleTemplate,
+    semesterStart,
+    noClassDates,
+    setSemesterStart,
+    addNoClassDate,
+    removeNoClassDate,
+    resetNoClassDates,
+    toggleSelect,
+    selectAll,
+    removeEvent,
+    appendEvents,
+    updateEvent,
+  } = useEventStore();
   const [input, setInput] = useState("下周五晚上七点开班会，地点线上会议");
+  const [newNoClassDate, setNewNoClassDate] = useState("");
   const [adding, setAdding] = useState(false);
   const [message, setMessage] = useState("");
   const [editingId, setEditingId] = useState<string | null>(events[0]?.id ?? null);
@@ -406,6 +422,7 @@ export default function EditorPage() {
         semesterStart,
         calendarName: "CampusFlow 校园事件",
         periods: scheduleTemplate.periods,
+        noClassDates,
       }),
     });
 
@@ -521,6 +538,57 @@ export default function EditorPage() {
         </section>
 
         <main className="space-y-5">
+          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+              <div>
+                <h2 className="font-bold text-emerald-950">节假日停课</h2>
+                <p className="mt-1 text-sm text-stone-600">
+                  导出 ICS 时，课程落在这些日期会自动跳过。默认包含 2026 年中国法定节假日，可补充学校校历停课日。
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  resetNoClassDates();
+                  setMessage("已恢复 2026 年默认节假日停课日期。");
+                }}
+                className="w-fit rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
+              >
+                恢复默认
+              </button>
+            </div>
+            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              <input
+                type="date"
+                value={newNoClassDate}
+                onChange={(event) => setNewNoClassDate(event.target.value)}
+                className="rounded-lg border border-stone-200 bg-white px-3 py-2 outline-emerald-700"
+              />
+              <button
+                onClick={() => {
+                  if (!newNoClassDate) return;
+                  addNoClassDate(newNoClassDate);
+                  setNewNoClassDate("");
+                  setMessage("已添加停课日期，导出 ICS 时会跳过当天课程。");
+                }}
+                className="rounded-lg bg-emerald-700 px-5 py-2 font-semibold text-white hover:bg-emerald-800"
+              >
+                添加停课日
+              </button>
+            </div>
+            <div className="mt-4 flex max-h-36 flex-wrap gap-2 overflow-auto">
+              {noClassDates.map((date) => (
+                <button
+                  key={date}
+                  onClick={() => removeNoClassDate(date)}
+                  className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
+                  title="点击移除"
+                >
+                  {date}
+                </button>
+              ))}
+            </div>
+          </section>
+
           {selectedEvent ? (
             <EventEditor
               key={selectedEvent.id}
