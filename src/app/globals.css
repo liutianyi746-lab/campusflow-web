@@ -1,8 +1,15 @@
 ﻿@import "tailwindcss";
 
 :root {
-  --background: #f6faf6;
-  --foreground: #17211d;
+  --background: #06110d;
+  --foreground: #ecfdf5;
+  --surface: rgba(13, 31, 24, 0.78);
+  --surface-strong: #10271e;
+  --line: rgba(167, 243, 208, 0.14);
+  --line-strong: rgba(110, 231, 183, 0.42);
+  --muted: #9fb8ad;
+  --brand: #6ee7b7;
+  --brand-strong: #a7f3d0;
 }
 
 @theme inline {
@@ -23,10 +30,12 @@ html {
 body {
   min-height: 100vh;
   background:
-    linear-gradient(180deg, rgba(31, 138, 112, 0.08), transparent 360px),
+    radial-gradient(circle at 78% 8%, rgba(52, 211, 153, 0.14), transparent 28rem),
+    radial-gradient(circle at 12% 34%, rgba(14, 116, 144, 0.1), transparent 24rem),
+    linear-gradient(145deg, #06110d, #091611 48%, #07100d),
     var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
 }
 
 button,
@@ -34,5 +43,141 @@ a,
 input,
 textarea,
 label {
-  outline-color: #1f8a70;
+  outline-color: var(--brand);
+}
+
+::selection {
+  background: rgba(110, 231, 183, 0.28);
+  color: #fff;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 3px;
+}
+
+.ambient-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(167, 243, 208, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(167, 243, 208, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, #000, transparent 88%);
+}
+
+.glass-panel {
+  border: 1px solid var(--line);
+  border-radius: 1.5rem;
+  background: linear-gradient(145deg, rgba(17, 43, 32, 0.82), rgba(7, 21, 16, 0.72));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22), inset 0 1px rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(18px);
+}
+
+.eyebrow {
+  color: var(--brand);
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.page-intro h1 {
+  margin-top: 0.65rem;
+  color: #f0fdf4;
+  font-size: clamp(2rem, 5vw, 3.25rem);
+  font-weight: 900;
+  line-height: 1.08;
+  letter-spacing: -0.045em;
+}
+
+.page-intro > p:last-of-type {
+  margin-top: 1rem;
+  max-width: 42rem;
+  color: var(--muted);
+  line-height: 1.75;
+}
+
+.glow-button,
+.secondary-button {
+  display: inline-flex;
+  min-height: 2.9rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.8rem;
+  border-radius: 0.85rem;
+  padding: 0.75rem 1.15rem;
+  font-weight: 800;
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease, box-shadow 180ms ease;
+}
+
+.glow-button {
+  background: var(--brand-strong);
+  color: #052e20;
+  box-shadow: 0 0 30px rgba(52, 211, 153, 0.22);
+}
+
+.secondary-button {
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.04);
+  color: #d1fae5;
+}
+
+.glow-button:hover,
+.secondary-button:hover,
+.shine-card:hover {
+  transform: translateY(-2px);
+}
+
+.glow-button:hover {
+  box-shadow: 0 0 42px rgba(52, 211, 153, 0.34);
+}
+
+.secondary-button:hover {
+  border-color: var(--line-strong);
+  background: rgba(110, 231, 183, 0.08);
+}
+
+.glow-button:active,
+.secondary-button:active {
+  transform: scale(0.98);
+}
+
+.shine-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 180ms ease, border-color 180ms ease;
+}
+
+.shine-card::after {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background: linear-gradient(110deg, transparent 25%, rgba(167, 243, 208, 0.08) 45%, transparent 65%);
+  transform: translateX(-100%);
+  transition: transform 650ms ease;
+}
+
+.shine-card:hover::after {
+  transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .glow-button:hover,
+  .secondary-button:hover,
+  .shine-card:hover {
+    transform: none;
+  }
 }
