@@ -139,7 +139,7 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
   };
 
   return (
-    <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+    <section className="editor-panel glass-panel rounded-xl p-5">
       <div className="flex flex-col justify-between gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-start">
         <div>
           <h2 className="font-bold text-emerald-950">编辑事件</h2>
@@ -457,7 +457,7 @@ export default function EditorPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="workflow-page mx-auto max-w-6xl">
       <StepIndicator current="editor" />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
@@ -485,7 +485,7 @@ export default function EditorPage() {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <section className="overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-sm">
+        <section className="event-list-panel glass-panel overflow-hidden rounded-xl">
           <div className="flex items-center justify-between border-b border-emerald-100 px-4 py-3">
             <div>
               <h2 className="font-bold text-emerald-950">事件列表</h2>
@@ -538,7 +538,7 @@ export default function EditorPage() {
         </section>
 
         <main className="space-y-5">
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <section className="glass-panel rounded-xl p-5">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
               <div>
                 <h2 className="font-bold text-emerald-950">节假日停课</h2>
@@ -599,7 +599,7 @@ export default function EditorPage() {
             />
           ) : null}
 
-          <section className="grid gap-4 rounded-xl border border-emerald-100 bg-white p-5 shadow-sm lg:grid-cols-[1fr_auto] lg:items-end">
+          <section className="glass-panel grid gap-4 rounded-xl p-5 lg:grid-cols-[1fr_auto] lg:items-end">
             <label>
               <span className="font-bold text-emerald-950">补充一条事件</span>
               <textarea

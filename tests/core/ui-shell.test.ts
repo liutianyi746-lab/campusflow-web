@@ -40,3 +40,13 @@ test("upload and result retain workflow hooks with refreshed surfaces", async ()
   assert.match(upload, /handleFile/);
   assert.match(result, /router\.push\("\/editor"\)/);
 });
+
+test("editor and export expose refreshed task surfaces", async () => {
+  const editor = await readFile("src/app/editor/page.tsx", "utf8");
+  const output = await readFile("src/app/export/page.tsx", "utf8");
+  assert.match(editor, /event-list-panel/);
+  assert.match(editor, /editor-panel/);
+  assert.match(output, /export-success/);
+  assert.match(output, /calendar-card/);
+  assert.match(editor, /exportIcs/);
+});
