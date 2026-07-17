@@ -165,6 +165,65 @@ label {
   transform: translateX(100%);
 }
 
+.workflow-page .text-emerald-950,
+.workflow-page .text-stone-900,
+.workflow-page .text-emerald-900 {
+  color: #ecfdf5;
+}
+
+.workflow-page .text-stone-700,
+.workflow-page .text-stone-600,
+.workflow-page .text-stone-500,
+.workflow-page .text-stone-400 {
+  color: var(--muted);
+}
+
+.workflow-page .bg-white,
+.workflow-page .bg-stone-50 {
+  background-color: rgba(8, 28, 20, 0.76);
+}
+
+.workflow-page input,
+.workflow-page textarea,
+.workflow-page select {
+  border-color: var(--line);
+  background: rgba(3, 15, 10, 0.72);
+  color: #ecfdf5;
+}
+
+.workflow-page input::placeholder,
+.workflow-page textarea::placeholder {
+  color: rgba(209, 250, 229, 0.32);
+}
+
+.source-preset,
+.metric-card {
+  transition: transform 180ms ease, border-color 180ms ease, background-color 180ms ease;
+}
+
+.source-preset:hover,
+.metric-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--line-strong);
+}
+
+.upload-zone {
+  border-color: rgba(110, 231, 183, 0.22);
+  background: radial-gradient(circle at 50% 15%, rgba(52, 211, 153, 0.09), transparent 55%), rgba(7, 23, 17, 0.78);
+}
+
+.result-table table {
+  color: #d1fae5;
+}
+
+.result-table thead {
+  background: rgba(3, 20, 13, 0.92);
+}
+
+.result-table tbody tr {
+  border-color: rgba(167, 243, 208, 0.08);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

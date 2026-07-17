@@ -29,3 +29,14 @@ test("landing page contains the selected fusion direction", async () => {
   assert.match(page, /shine-card/);
   assert.match(page, /GlowButton/);
 });
+
+test("upload and result retain workflow hooks with refreshed surfaces", async () => {
+  const upload = await readFile("src/app/upload/page.tsx", "utf8");
+  const result = await readFile("src/app/result/page.tsx", "utf8");
+  assert.match(upload, /upload-zone/);
+  assert.match(upload, /source-preset/);
+  assert.match(result, /metric-card/);
+  assert.match(result, /result-table/);
+  assert.match(upload, /handleFile/);
+  assert.match(result, /router\.push\("\/editor"\)/);
+});
