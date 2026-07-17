@@ -224,6 +224,23 @@ label {
   border-color: rgba(167, 243, 208, 0.08);
 }
 
+.event-list-panel article {
+  border-color: rgba(167, 243, 208, 0.08);
+  background: transparent;
+}
+
+.event-list-panel article:hover {
+  background: rgba(110, 231, 183, 0.05);
+}
+
+.editor-panel {
+  background: rgba(9, 29, 21, 0.9);
+}
+
+.calendar-card {
+  min-height: 10rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
