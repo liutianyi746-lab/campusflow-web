@@ -21,3 +21,11 @@ test("layout and step indicator use the shared visual language", async () => {
   assert.match(steps, /step-track/);
   assert.match(steps, /aria-current/);
 });
+
+test("landing page contains the selected fusion direction", async () => {
+  const page = await readFile("src/app/page.tsx", "utf8");
+  assert.match(page, /hero-orbit/);
+  assert.match(page, /event-stream/);
+  assert.match(page, /shine-card/);
+  assert.match(page, /GlowButton/);
+});
