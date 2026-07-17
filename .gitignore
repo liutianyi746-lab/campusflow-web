@@ -50,3 +50,6 @@ next-env.d.ts
 # local OCR/debug artifacts
 /tmp/
 *.traineddata
+
+# local design exploration artifacts
+/.superpowers/
