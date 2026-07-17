@@ -12,3 +12,12 @@ test("shared UI shell exposes semantic primitives and motion fallback", async ()
   assert.match(css, /\.glass-panel/);
   assert.match(css, /\.glow-button/);
 });
+
+test("layout and step indicator use the shared visual language", async () => {
+  const layout = await readFile("src/app/layout.tsx", "utf8");
+  const steps = await readFile("src/app/_components/step-indicator.tsx", "utf8");
+  assert.match(layout, /ambient-grid/);
+  assert.match(layout, /glass-nav/);
+  assert.match(steps, /step-track/);
+  assert.match(steps, /aria-current/);
+});
