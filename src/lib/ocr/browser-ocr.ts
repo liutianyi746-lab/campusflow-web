@@ -534,7 +534,7 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
         sw: Math.min(width, x1 + pad) - Math.max(0, x0 - pad),
         sh: Math.min(height, y1 + pad) - Math.max(0, y0 - pad),
       };
-      const scale = Math.max(3.2, Math.min(5, 760 / Math.max(1, crop.sw)));
+      const scale = Math.max(3.2, Math.min(6, 1150 / Math.max(1, crop.sw)));
       cells.push({
         name: `cell-d${dayOrder[dayIndex]}-p${periods[0]}-${periods[periods.length - 1]}`,
         canvas: cropCanvas(tableRaw, crop, scale),
