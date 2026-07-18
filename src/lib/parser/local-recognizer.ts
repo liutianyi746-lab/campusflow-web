@@ -42,7 +42,7 @@ const CHINESE_NUMBER_MAP: Record<string, number> = {
   二十四: 24,
 };
 
-const COURSE_NOISE = /课程表|课表|课程|任课教师|任课老师|教师|老师|地点|教室|上课地点|节次|周次/g;
+const COURSE_NOISE = /(?:课程表|课表|课程|任课教师|任课老师|教师|老师|地点|教室|上课地点|节次|周次)\s*[:：]?/g;
 
 function today(): Date {
   const now = new Date();
@@ -303,7 +303,8 @@ function seatNumberFrom(rawInput: string, location?: string): string | undefined
 }
 
 function teacherFrom(input: string): string | undefined {
-  return input.match(/[\u4e00-\u9fa5·,，、]{1,16}(?:老师|教授|讲师)/)?.[0];
+  const labeled = input.match(/(?:教师|任课教师|任课老师)\s*[:：]\s*([\u4e00-\u9fa5·,，、（）()0-9]{1,40})/);
+  return labeled?.[1] ?? input.match(/[\u4e00-\u9fa5·,，、]{1,16}(?:老师|教授|讲师)/)?.[0];
 }
 
 function weekdayFrom(input: string, fallback?: number): number | undefined {
@@ -317,6 +318,15 @@ function parseWeekRule(input: string): { weekStart: number; weekEnd: number; wee
     return {
       weekStart: Math.min(...specificWeeks),
       weekEnd: Math.max(...specificWeeks),
+      weekType: "SPECIFIC_WEEKS",
+      specificWeeks,
+    };
+  }
+
+  if (specificWeeks.length === 1 && /第\s*\d{1,2}\s*周/.test(input)) {
+    return {
+      weekStart: specificWeeks[0],
+      weekEnd: specificWeeks[0],
       weekType: "SPECIFIC_WEEKS",
       specificWeeks,
     };
@@ -363,8 +373,9 @@ function courseNameFrom(line: string, teacher?: string, location?: string): stri
     .replace(COURSE_NOISE, " ");
 
   return name
-    .replace(/[、，,。()（）:：]/g, " ")
+    .replace(/[、，,。]/g, " ")
     .replace(/\s+/g, " ")
+    .replace(/(?<=[\u4e00-\u9fa5]):(?=[\u4e00-\u9fa5])/g, "：")
     .trim();
 }
 

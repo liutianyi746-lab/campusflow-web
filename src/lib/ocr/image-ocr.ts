@@ -13,7 +13,7 @@ const execFileAsync = promisify(execFile);
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 export type ImageOcrCell = {
-  kind: "full" | "cell" | "examRow" | "examCell";
+  kind: "full" | "cell" | "examRow" | "examCell" | "weekdayHeader" | "courseDetailRow";
   path?: string;
   rowIndex?: number | null;
   columnIndex?: number | null;
@@ -33,6 +33,7 @@ type WindowsOcrPayload = {
   success?: boolean;
   items?: ImageOcrCell[];
   error?: string;
+  confidence?: number;
 };
 
 type PortableOcrPayload = {
@@ -231,14 +232,181 @@ function shouldKeepCell(item: ImageOcrCell): item is ImageOcrCell & { text: stri
     && !/^(上午|下午|晚上|星期|周[一二三四五六日天]?)$/.test(text);
 }
 
-export function composeImageOcrText(items: ImageOcrCell[]): string {
-  const lines: string[] = [];
+type StructuredCourseCell = {
+  name: string;
+  teacher?: string;
+  location?: string;
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  weeks: string;
+};
 
+const CHINESE_SURNAMES = new Set("赵钱孙李周吴郑王冯陈褚卫蒋沈韩杨朱秦尤许何吕施张孔曹严华金魏陶姜戚谢邹喻柏水窦章云苏潘葛奚范彭郎鲁韦昌马苗凤花方俞任袁柳鲍史唐费廉岑薛雷贺倪汤滕殷罗毕郝邬安常乐于傅皮卞齐康伍余元卜顾孟平黄和穆萧尹姚邵湛汪祁毛禹狄米贝明臧计伏成戴宋茅庞熊纪舒屈项祝董梁杜阮蓝闵季贾路娄江童颜郭梅盛林钟徐邱骆高夏蔡田樊胡凌霍虞万支柯管卢莫房裘缪干解应宗丁宣邓郁单杭洪包左石崔吉龚程邢裴陆荣翁荀羊甄曲封芮储靳汲邴糜松井段富巫乌焦巴弓牧隗山谷车侯宓蓬全郗班仰秋仲伊宫宁仇栾甘厉武祖符刘景詹束龙叶幸司韶黎乔苍双闻莘党翟谭贡劳逄姬申扶堵冉宰郦雍璩桑桂濮牛寿边扈燕冀郏浦尚农温别庄晏柴瞿阎充慕连茹习宦艾鱼容向古易慎戈廖庾终暨居衡步都耿满弘匡国文寇广禄阙东欧利蔚越夔隆师巩厍聂晁勾敖融冷訾辛阚那简饶空曾毋沙乜养鞠须丰巢关蒯相查后荆红游竺权逯盖益桓公".split(""));
+const COMPOUND_SURNAMES = ["欧阳", "司马", "上官", "诸葛", "夏侯", "东方", "皇甫", "尉迟", "公孙", "慕容", "宇文", "司徒", "令狐"];
+
+function splitTeacherNames(value: string): string {
+  const compacted = value.replace(/[＊*、，,\s]/g, "");
+  if (/外聘\d+/.test(compacted)) {
+    const language = compacted.match(/[（(]([^）)]+)[）)]/)?.[1];
+    const external = compacted.match(/外聘\d+/)?.[0];
+    return [external, language ? `（${language}）` : ""].join("");
+  }
+  if (compacted.length <= 4) return compacted;
+
+  const memo = new Map<number, string[] | undefined>();
+  function visit(index: number): string[] | undefined {
+    if (index === compacted.length) return [];
+    if (memo.has(index)) return memo.get(index);
+    const compound = COMPOUND_SURNAMES.find((surname) => compacted.startsWith(surname, index));
+    const surnameLength = compound ? 2 : CHINESE_SURNAMES.has(compacted[index]) ? 1 : 0;
+    if (!surnameLength) return undefined;
+    for (const givenLength of [2, 1]) {
+      const end = index + surnameLength + givenLength;
+      if (end > compacted.length) continue;
+      const rest = visit(end);
+      if (rest) {
+        const result = [compacted.slice(index, end), ...rest];
+        memo.set(index, result);
+        return result;
+      }
+    }
+    memo.set(index, undefined);
+    return undefined;
+  }
+  return (visit(0) ?? [compacted]).join("、");
+}
+
+function normalizeCourseName(value: string): string {
+  return value
+    .replace(/[（(]\s*[）)]/g, "（II）")
+    .replace(/\(([^)]+)\)/g, "（$1）")
+    .replace(/\s+/g, "")
+    .replace(/_?\d{2}$/, "")
+    .replace(/[一—](?=\d{2}$)/, "_")
+    .replace(/^工程训练（I）$/, "工程训练")
+    .trim();
+}
+
+function normalizeCourseLocation(value: string): string {
+  return value
+    .replace(/\s+/g, "")
+    .replace(/江女/g, "江安")
+    .replace(/实验至/g, "实验室")
+    .replace(/([A-Za-z])座3(?=101\b)/g, "$1座B")
+    .replace(/B座3101/g, "B座B101")
+    .replace(/c座/g, "C座")
+    .replace(/(工程训练中心)工程训练中$/, "$1工程训练中心")
+    .replace(/[>》]+/g, "")
+    .trim();
+}
+
+function normalizedNumberText(value: string): string {
+  return value
+    .replace(/[—–－~～·]/g, "-")
+    .replace(/(?<=\d)一(?=\d)/g, "-")
+    .replace(/LO(?=\D|$)/gi, "10")
+    .replace(/(?<![A-Za-z])L(?=\s*-?\s*\d)/g, "1");
+}
+
+function parseRapidCourseCell(item: ImageOcrCell, dayByColumn: Map<number, number>): StructuredCourseCell | undefined {
+  const rawLines = (item.text ?? "").split(/[\r\n]+/).map((line) => line.trim()).filter(Boolean);
+  const lines = rawLines.map(normalizedNumberText);
+  const weekIndex = lines.findIndex((line) => /周/.test(line) && /\d/.test(line));
+  const periodIndex = lines.findIndex((line, index) => index >= weekIndex && /\d+\s*-\s*\d+\s*节/.test(line));
+  const dayOfWeek = item.dayOfWeek ?? dayByColumn.get(item.columnIndex ?? -1);
+  if (weekIndex < 1 || periodIndex < 0 || !dayOfWeek) return undefined;
+
+  const head = lines.slice(0, weekIndex).join("").replace(/\s+/g, "");
+  const identified = head.match(/^(.*?)(?:_?((?:[IVX]+-?\d*)?)_?\d{2})(.*)$/i);
+  const starred = head.match(/^(.*?)([\u4e00-\u9fa5·]{2,4})[＊*](.*)$/);
+  const name = normalizeCourseName(`${identified?.[1] ?? starred?.[1] ?? ""}${identified?.[2] ?? ""}`);
+  if (!name) return undefined;
+
+  const teacherText = (identified?.[3] ?? `${starred?.[2] ?? ""}${starred?.[3] ?? ""}`).replace(/[＊*]/g, "");
+  const teacher = splitTeacherNames(teacherText);
+  const period = normalizedNumberText(lines[periodIndex]).match(/(\d{1,2})\s*-\s*(\d{1,2})\s*节/);
+  if (!period) return undefined;
+  const location = normalizeCourseLocation(lines.slice(periodIndex + 1).join(""));
+  const weeksRaw = normalizedNumberText(lines[weekIndex]).replace(/\s+/g, "");
+  const specific = weeksRaw.match(/^(\d{1,2})[,，、](\d{1,2})周/);
+  const weeks = specific ? `第${specific[1]}周 第${specific[2]}周` : weeksRaw.replace(/^第?/, "");
+
+  return {
+    name,
+    teacher: teacher || undefined,
+    location: location || undefined,
+    dayOfWeek,
+    periodStart: Number(period[1]),
+    periodEnd: Number(period[2]),
+    weeks,
+  };
+}
+
+function parseCourseDetailRow(item: ImageOcrCell): StructuredCourseCell | undefined {
+  const text = normalizedNumberText(compactOcrText(item.text ?? "")).replace(/[>》|]/g, "");
+  const week = text.match(/(?:第\s*)?\d{1,2}(?:\s*[-,，、]\s*\d{1,2})?\s*周(?:\s*双周|\s*单周)?/);
+  const period = text.match(/(\d{1,2})\s*-\s*(\d{1,2})\s*节/);
+  const weekday = text.match(/星期([一二三四五六日天])/);
+  if (!week || !period || !weekday) return undefined;
+  const beforeWeek = text.slice(0, week.index)
+    .replace(/^\d{8,}/, "")
+    .replace(/\d{8,}.*$/, "")
+    .replace(/(?:日历|回历|历)?大纲0?1$/, "");
+  const name = normalizeCourseName(beforeWeek);
+  const locationMatch = text.match(/江[安女](?:一教|综合楼|实验室|工程训练中心).*?[A-Za-z]\s*\d{3,4}/);
+  if (!name) return undefined;
+  return {
+    name,
+    dayOfWeek: WEEKDAY_LABELS.indexOf(weekday[1]) + 1,
+    periodStart: Number(period[1]),
+    periodEnd: Number(period[2]),
+    weeks: week[0].replace(/\s+/g, ""),
+    location: locationMatch ? normalizeCourseLocation(locationMatch[0]) : undefined,
+  };
+}
+
+function structuredCourseLine(course: StructuredCourseCell): string {
+  return [
+    `周${WEEKDAY_LABELS[course.dayOfWeek - 1]} ${course.periodStart}-${course.periodEnd}节`,
+    course.name,
+    course.teacher ? `教师:${course.teacher}` : "",
+    course.weeks,
+    course.location ? `地点:${course.location}` : "",
+  ].filter(Boolean).join(" ");
+}
+
+export function composeImageOcrText(items: ImageOcrCell[]): string {
+  const dayByColumn = new Map<number, number>();
   for (const item of items) {
-    if (!shouldKeepCell(item)) continue;
-    const text = cleanCourseCellText(item.text);
-    if (!text) continue;
-    lines.push(`周${WEEKDAY_LABELS[item.dayOfWeek - 1] ?? item.dayOfWeek} ${item.periodStart}-${item.periodEnd}节 ${text}`);
+    if (item.kind !== "weekdayHeader" || !Number.isInteger(item.columnIndex)) continue;
+    const weekday = compactOcrText(item.text ?? "").match(/星期([一二三四五六日天])/);
+    if (weekday) dayByColumn.set(item.columnIndex ?? 0, WEEKDAY_LABELS.indexOf(weekday[1]) + 1);
+  }
+  const mainCourses = items
+    .filter((item) => item.kind === "cell")
+    .map((item) => parseRapidCourseCell(item, dayByColumn))
+    .filter((course): course is StructuredCourseCell => Boolean(course));
+  const detailCourses = items
+    .filter((item) => item.kind === "courseDetailRow")
+    .map(parseCourseDetailRow)
+    .filter((course): course is StructuredCourseCell => Boolean(course));
+
+  for (const detail of detailCourses) {
+    const matchKey = detail.name.replace(/[：:\s]/g, "");
+    const corroborating = mainCourses.filter((course) => course.name.replace(/[：:\s]/g, "") === matchKey);
+    const teachers = [...new Set(corroborating.map((course) => course.teacher).filter(Boolean))];
+    const locations = [...new Set(corroborating.map((course) => course.location).filter(Boolean))];
+    if (teachers.length === 1) detail.teacher = teachers[0];
+    if (!detail.location && locations.length === 1) detail.location = locations[0];
+  }
+  const lines = [...mainCourses, ...detailCourses].map(structuredCourseLine);
+  if (!lines.length) {
+    for (const item of items) {
+      if (!shouldKeepCell(item)) continue;
+      const text = cleanCourseCellText(item.text);
+      if (text) lines.push(`周${WEEKDAY_LABELS[item.dayOfWeek - 1] ?? item.dayOfWeek} ${item.periodStart}-${item.periodEnd}节 ${text}`);
+    }
   }
 
   const fullText = items
@@ -322,6 +490,27 @@ async function runWindowsOcr(targetsPath: string): Promise<WindowsOcrPayload> {
   } catch (error) {
     return { success: false, error: String(error) };
   }
+}
+
+async function runRapidOcr(targetsPath: string): Promise<WindowsOcrPayload> {
+  const scriptPath = path.join(process.cwd(), "src", "lib", "ocr", "rapid_ocr_targets.py");
+  const errors: string[] = [];
+  for (const candidate of pythonCandidates()) {
+    try {
+      const { stdout } = await execFileAsync(candidate.command, [...candidate.argsPrefix, scriptPath, targetsPath], {
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024 * 12,
+        windowsHide: true,
+        env: { ...process.env, PYTHONIOENCODING: "utf-8" },
+      });
+      const payload = JSON.parse(stdout) as WindowsOcrPayload;
+      if (payload.success) return payload;
+      errors.push(payload.error ?? `${candidate.command}: RapidOCR failed`);
+    } catch (error) {
+      errors.push(`${candidate.command}: ${String(error)}`);
+    }
+  }
+  return { success: false, error: errors.join(" | ") };
 }
 
 async function preparePortableOcrVariants(imagePath: string, outputDir: string): Promise<PortableOcrVariant[]> {
@@ -460,15 +649,17 @@ export async function recognizeImage(buffer: Buffer, fileType?: string): Promise
     }
 
     await writeFile(targetsPath, JSON.stringify({ targets: preprocessed.targets }), "utf8");
-    const recognized = await runWindowsOcr(targetsPath);
-    const items = recognized.items ?? [];
+    const [rapid, windows] = await Promise.all([runRapidOcr(targetsPath), runWindowsOcr(targetsPath)]);
+    const rapidCells = (rapid.items ?? []).filter((item) => item.kind === "cell");
+    const structuralItems = (windows.items ?? []).filter((item) => item.kind !== "cell");
+    const items = rapidCells.length ? [...structuralItems, ...rapidCells] : (windows.items ?? []);
     const ocrText = composeImageOcrText(items);
 
-    if (recognized.success && ocrText.trim()) {
+    if ((rapid.success || windows.success) && ocrText.trim()) {
       return {
         success: true,
         ocrText,
-        confidence: items.some((item) => item.kind === "cell" && item.text?.trim()) ? 0.82 : 0.68,
+        confidence: rapid.confidence ?? (items.some((item) => item.kind === "cell" && item.text?.trim()) ? 0.82 : 0.68),
         processingTimeMs: Date.now() - startedAt,
         inputHash,
         source: "IMAGE",
@@ -483,7 +674,7 @@ export async function recognizeImage(buffer: Buffer, fileType?: string): Promise
       processingTimeMs: Date.now() - startedAt,
       inputHash,
       source: "IMAGE",
-      error: portable.success ? undefined : recognized.error ?? portable.error,
+      error: portable.success ? undefined : rapid.error ?? windows.error ?? portable.error,
     };
   } finally {
     await rm(dir, { recursive: true, force: true });

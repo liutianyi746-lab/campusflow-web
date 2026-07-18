@@ -5,7 +5,9 @@ import { describe, it } from "node:test";
 import { composeImageOcrText } from "../../src/lib/ocr/image-ocr.ts";
 import { recognizedTimetableCellLinesForTest } from "../../src/lib/ocr/browser-ocr.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
+import { parseWithLocalFallback } from "../../src/lib/parser/network-parse-fallback.ts";
 import { route } from "../../src/lib/parser/parser-router.ts";
+import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
 import {
   eventTypeLabel,
   formatEventTime,
@@ -13,6 +15,20 @@ import {
 } from "../../src/lib/ui/event-format.ts";
 
 describe("campus event flow", () => {
+  it("keeps OCR results usable when the remote parse request cannot be fetched", () => {
+    const events = parseWithLocalFallback(
+      "周一 1-2节 高等数学 张老师 A101 1-16周",
+      "COURSE",
+      "PDF",
+      DEFAULT_SCHEDULE_TEMPLATE,
+      "2026-09-07",
+    );
+
+    assert.equal(events.length, 1);
+    assert.equal(events[0].title, "高等数学");
+    assert.equal(events[0].startTime, "2026-09-07T08:00:00");
+  });
+
   it("routes all supported campus inputs toward time events", () => {
     assert.equal(route("课程表 周一 1-2节 高等数学 教学楼A301"), "COURSE");
     assert.equal(route("考试安排 6月20日 15:00 教学楼A301"), "EXAM");
