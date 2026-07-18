@@ -6,6 +6,7 @@ import { composeImageOcrText } from "../../src/lib/ocr/image-ocr.ts";
 import { recognizedTimetableCellLinesForTest } from "../../src/lib/ocr/browser-ocr.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
 import { parseWithLocalFallback } from "../../src/lib/parser/network-parse-fallback.ts";
+import { shouldPreferDeterministicCourseParser } from "../../src/lib/parser/parser-strategy.ts";
 import { route } from "../../src/lib/parser/parser-router.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
 import {
@@ -15,6 +16,17 @@ import {
 } from "../../src/lib/ui/event-format.ts";
 
 describe("campus event flow", () => {
+  it("does not send structured timetable OCR back through a generative parser", () => {
+    const structured = [
+      "周一 3-4节 体育-3跆拳道 教师:谢云龙 1-12周 地点:江安体育场体育馆4楼",
+      "周二 1-2节 概率统计（理工） 教师:常寅山 1-17周 地点:江安一教A座A507",
+      "周三 10-12节 大学物理（理工）II-2 教师:张软玉 1-16周 地点:江安一教B座B505",
+    ].join("\n");
+
+    assert.equal(shouldPreferDeterministicCourseParser(structured, "COURSE"), true);
+    assert.equal(shouldPreferDeterministicCourseParser("下周一提醒我交作业", "HOMEWORK"), false);
+  });
+
   it("keeps OCR results usable when the remote parse request cannot be fetched", () => {
     const events = parseWithLocalFallback(
       "周一 1-2节 高等数学 张老师 A101 1-16周",
