@@ -35,6 +35,13 @@ type TimetableDetection = {
   cells: CanvasVariant[];
 };
 
+type TimetableGrid = {
+  xLines: number[];
+  top: number;
+  headerBottom: number;
+  bottom: number;
+};
+
 const WEEKDAY_LABELS = ["一", "二", "三", "四", "五", "六", "日"];
 
 type CanonicalCourse = {
@@ -273,7 +280,7 @@ function cropCanvas(source: HTMLCanvasElement, crop: CropBox, scale: number): HT
   return canvas;
 }
 
-function darkMask(canvas: HTMLCanvasElement, threshold = 190): Uint8Array {
+function darkMask(canvas: HTMLCanvasElement, threshold = 245): Uint8Array {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("图片处理失败");
   const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -286,6 +293,76 @@ function darkMask(canvas: HTMLCanvasElement, threshold = 190): Uint8Array {
   }
 
   return mask;
+}
+
+function longestDenseVerticalRun(mask: Uint8Array, width: number, height: number, xLines: number[]): { start: number; end: number } | undefined {
+  const dense = Array.from({ length: height }, (_, y) => {
+    let hits = 0;
+    for (const x of xLines) {
+      let found = false;
+      for (let dx = -1; dx <= 1 && !found; dx += 1) {
+        const px = x + dx;
+        if (px >= 0 && px < width && mask[y * width + px]) found = true;
+      }
+      if (found) hits += 1;
+    }
+    return hits >= Math.max(7, xLines.length - 2) ? 1 : 0;
+  });
+
+  let best: { start: number; end: number } | undefined;
+  let start: number | undefined;
+  for (let y = 0; y < height; y += 1) {
+    if (dense[y] && start === undefined) start = y;
+    if ((!dense[y] || y === height - 1) && start !== undefined) {
+      const end = dense[y] && y === height - 1 ? y : y - 1;
+      if (!best || end - start > best.end - best.start) best = { start, end };
+      start = undefined;
+    }
+  }
+  return best;
+}
+
+function detectTimetableGrid(mask: Uint8Array, width: number, height: number): TimetableGrid | undefined {
+  const xLines = lineGroups(sumColumns(mask, width, height), height * 0.25)
+    .map((group) => group.center);
+  if (xLines.length < 10) return undefined;
+
+  // 教务课表的前两列是“大节/节次”，随后才是 7 个星期列。
+  // 取连续的前 10 条长竖线，避免下方课程信息表的短竖线干扰。
+  const gridXLines = xLines.slice(0, 10);
+  const verticalRun = longestDenseVerticalRun(mask, width, height, gridXLines);
+  if (!verticalRun || verticalRun.end - verticalRun.start < height * 0.15) return undefined;
+
+  const spanStart = gridXLines[0];
+  const spanEnd = gridXLines[gridXLines.length - 1];
+  const spanWidth = spanEnd - spanStart;
+  const rowCounts: number[] = [];
+  for (let y = verticalRun.start; y <= verticalRun.end; y += 1) {
+    rowCounts.push(regionDarkCount(mask, width, spanStart, y, spanEnd + 1, y + 1));
+  }
+  const rowLines = lineGroups(rowCounts, spanWidth * 0.65)
+    .map((group) => group.center + verticalRun.start);
+  if (rowLines.length < 2) return undefined;
+
+  const top = rowLines[0];
+  const headerBottom = rowLines[1];
+  const bottom = verticalRun.end;
+  if (bottom - headerBottom < 12 * 12) return undefined;
+  return { xLines: gridXLines, top, headerBottom, bottom };
+}
+
+export function detectTimetableGridForTest(
+  rgba: Uint8Array | Uint8ClampedArray,
+  width: number,
+  height: number,
+): TimetableGrid | undefined {
+  const mask = new Uint8Array(width * height);
+  for (let index = 0; index < mask.length; index += 1) {
+    const offset = index * 4;
+    const gray = rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114;
+    mask[index] = gray < 245 ? 1 : 0;
+  }
+  return detectTimetableGrid(mask, width, height);
 }
 
 function tableBoxFromMask(mask: Uint8Array, width: number, height: number): CropBox | undefined {
@@ -369,20 +446,25 @@ function regionDarkCount(mask: Uint8Array, width: number, x0: number, y0: number
 function detectTimetable(image: HTMLImageElement): TimetableDetection | undefined {
   const original = imageToCanvas(image);
   const originalMask = darkMask(original);
-  const box = tableBoxFromMask(originalMask, original.width, original.height);
-  if (!box || box.sw < original.width * 0.45 || box.sh < original.height * 0.12) return undefined;
-
+  const grid = detectTimetableGrid(originalMask, original.width, original.height);
+  if (!grid) return undefined;
+  const box = {
+    sx: grid.xLines[0],
+    sy: grid.top,
+    sw: grid.xLines[grid.xLines.length - 1] - grid.xLines[0] + 1,
+    sh: grid.bottom - grid.top + 1,
+  };
   const tableRaw = cropCanvas(original, box, 1);
   const mask = darkMask(tableRaw);
   const width = tableRaw.width;
   const height = tableRaw.height;
-  const xLines = lineGroups(sumColumns(mask, width, height), height * 0.55).map((group) => group.center);
-  const rowLines = lineGroups(sumRows(mask, width, height), width * 0.55).map((group) => group.center);
-  if (xLines.length < 10 || rowLines.length < 14) return undefined;
-
-  const dayLines = xLines.slice(2, 10);
-  const bounds = periodBoundaries(rowLines);
-  if (dayLines.length !== 8 || bounds.length !== 13) return undefined;
+  const dayLines = grid.xLines.slice(2, 10).map((x) => x - box.sx);
+  const periodTop = grid.headerBottom - box.sy;
+  const periodBottom = grid.bottom - box.sy;
+  const bounds = Array.from({ length: 13 }, (_, index) => (
+    Math.round(periodTop + ((periodBottom - periodTop) * index) / 12)
+  ));
+  const rowLines = lineGroups(sumRows(mask, width, height), width * 0.35).map((group) => group.center);
 
   const periodRanges = Array.from({ length: 12 }, (_, index) => ({
     period: index + 1,
