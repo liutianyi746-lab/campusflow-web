@@ -400,6 +400,11 @@ function parseCourseEvents(text: string, source: EventSource): ReturnType<typeof
     const teacher = teacherFrom(line);
     const weekRule = parseWeekRule(line);
     const name = courseNameFrom(line, teacher, location);
+    const hasExplicitWeek = /(?:第?\s*\d{1,2}\s*(?:[-~,，、至到]\s*\d{1,2})?\s*周|[单双]周)/.test(line);
+    const confidence = Math.min(
+      0.92,
+      0.55 + (teacher ? 0.12 : 0) + (location ? 0.12 : 0) + (hasExplicitWeek ? 0.08 : 0) + (/_\d{2}\b/.test(name) ? 0.05 : 0),
+    );
 
     if (!name) continue;
     rawCourses.push({
@@ -410,7 +415,7 @@ function parseCourseEvents(text: string, source: EventSource): ReturnType<typeof
       periodStart: period.start,
       periodEnd: period.end,
       ...weekRule,
-      confidence: 0.88,
+      confidence,
     });
   }
 
