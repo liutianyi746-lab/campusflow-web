@@ -90,7 +90,8 @@ export function isSparsePdfText(value: string): boolean {
 type BrowserPdfPage = Awaited<ReturnType<Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>["getPage"]>>;
 
 async function renderPageToImageFile(page: BrowserPdfPage, pageNumber: number): Promise<File> {
-  const viewport = page.getViewport({ scale: 2.4 });
+  // 小字号中文课表在 2.4 倍渲染时笔画不足，浏览器 OCR 容易混淆形近字。
+  const viewport = page.getViewport({ scale: 3.5 });
   const canvas = document.createElement("canvas");
   canvas.width = Math.ceil(viewport.width);
   canvas.height = Math.ceil(viewport.height);
