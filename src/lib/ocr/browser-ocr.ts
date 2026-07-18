@@ -464,7 +464,7 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
   const bounds = Array.from({ length: 13 }, (_, index) => (
     Math.round(periodTop + ((periodBottom - periodTop) * index) / 12)
   ));
-  const rowLines = lineGroups(sumRows(mask, width, height), width * 0.35).map((group) => group.center);
+  const dayOrder = [7, 1, 2, 3, 4, 5, 6];
 
   const periodRanges = Array.from({ length: 12 }, (_, index) => ({
     period: index + 1,
@@ -479,9 +479,9 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
     if (x1 <= x0) continue;
 
     const columnWidth = x1 - x0;
-    const cellLines = rowLines.filter((line) => {
+    const cellLines = bounds.filter((line) => {
       const count = regionDarkCount(mask, width, x0, Math.max(0, line - 2), x1, Math.min(height, line + 3));
-      return count >= columnWidth * 0.85;
+      return count >= columnWidth * 0.72;
     });
     cellLines.push(bounds[0], bounds[bounds.length - 1]);
     const seenCellLines = new Set<number>();
@@ -514,10 +514,10 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
       };
       const scale = Math.max(3.2, Math.min(5, 760 / Math.max(1, crop.sw)));
       cells.push({
-        name: `cell-d${dayIndex + 1}-p${periods[0]}-${periods[periods.length - 1]}`,
+        name: `cell-d${dayOrder[dayIndex]}-p${periods[0]}-${periods[periods.length - 1]}`,
         canvas: cropCanvas(tableRaw, crop, scale),
         kind: "cell",
-        dayOfWeek: dayIndex + 1,
+        dayOfWeek: dayOrder[dayIndex],
         periodStart: periods[0],
         periodEnd: periods[periods.length - 1],
       });
