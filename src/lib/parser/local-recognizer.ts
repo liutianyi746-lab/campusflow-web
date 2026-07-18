@@ -284,7 +284,7 @@ function locationFrom(rawInput: string): string | undefined {
   const explicitField = input.match(/(?:地点|教室|考场|上课地点)\s*[:：]?\s*([^，。,.；;\n]+)/);
   if (explicitField) return explicitField[1].trim();
 
-  const namedLocation = input.match(/(?:教学楼|实验楼|综合楼|图书馆|体育馆|排球场|操场|运动场|晨曦排球场|机房|教室|主楼|一教|二教|三教|四教|五教|逸夫楼|明德楼|笃行楼|博学楼|颐德楼|经世楼)\s*[\u4e00-\u9fa5A-Za-z0-9-]*/);
+  const namedLocation = input.match(/(?:江安|望江|华西)?(?:教学楼|实验楼|实验室|综合楼|图书馆|体育馆|体育场|排球场|操场|运动场|晨曦排球场|工程训练中心|机房|教室|主楼|一教|二教|三教|四教|五教|逸夫楼|明德楼|笃行楼|博学楼|颐德楼|经世楼)\s*[\u4e00-\u9fa5A-Za-z0-9-]*/);
   if (namedLocation) return namedLocation[0].trim();
 
   const roomCode = input.match(/\b[A-Za-z]-?\d{3,4}\b/);
@@ -304,7 +304,11 @@ function seatNumberFrom(rawInput: string, location?: string): string | undefined
 
 function teacherFrom(input: string): string | undefined {
   const labeled = input.match(/(?:教师|任课教师|任课老师)\s*[:：]\s*([\u4e00-\u9fa5·,，、（）()0-9]{1,40})/);
-  return labeled?.[1] ?? input.match(/[\u4e00-\u9fa5·,，、]{1,16}(?:老师|教授|讲师)/)?.[0];
+  if (labeled) return labeled[1];
+  const titled = input.match(/[\u4e00-\u9fa5·,，、]{1,16}(?:老师|教授|讲师)/)?.[0];
+  if (titled) return titled;
+  const afterCourseCode = input.match(/_\d{2}\s+([\u4e00-\u9fa5·,，、（）()0-9]{1,24})(?=\s+(?:第?\d{1,2}\s*[-~,，、至到]|江安|望江|华西))/);
+  return afterCourseCode?.[1]?.replace(/[”"'“]+$/g, "").trim();
 }
 
 function weekdayFrom(input: string, fallback?: number): number | undefined {
@@ -371,6 +375,9 @@ function courseNameFrom(line: string, teacher?: string, location?: string): stri
     .replace(/第?\s*\d{1,2}\s*周/g, " ")
     .replace(/[单双]周/g, " ")
     .replace(COURSE_NOISE, " ");
+
+  const codedName = name.match(/^(.+?_\d{2})(?:\s|$)/)?.[1];
+  if (codedName) return codedName.replace(/\s+/g, " ").trim();
 
   return name
     .replace(/[、，,。]/g, " ")
