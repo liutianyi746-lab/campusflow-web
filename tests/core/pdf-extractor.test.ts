@@ -9,6 +9,7 @@ import { extractPdfText } from "../../src/lib/pdf/pdf-text-extractor.ts";
 import { extractPdfTextWithPdfJs } from "../../src/lib/pdf/pdfjs-fallback-extractor.ts";
 import { isSparsePdfText } from "../../src/lib/pdf/pdf-text-quality.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
+import { detectTimetableGridForTest } from "../../src/lib/ocr/browser-ocr.ts";
 
 type ExpectedCourse = {
   name: string;
@@ -60,6 +61,20 @@ function stableRecord(record: ExpectedCourse): string {
 }
 
 describe("pdf schedule extraction", () => {
+  it("detects the light-gray timetable grid used by the browser PDF fallback", async () => {
+    const renderedPage = "tmp/target-page.png";
+    if (!existsSync(renderedPage)) return;
+
+    const sharp = (await import("sharp")).default;
+    const { data, info } = await sharp(renderedPage).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    const grid = detectTimetableGridForTest(data, info.width, info.height);
+
+    assert.ok(grid, "the embedded timetable uses light-gray rules that must not be treated as blank");
+    assert.equal(grid.xLines.length, 10);
+    assert.ok(grid.headerBottom > grid.top);
+    assert.ok(grid.bottom - grid.headerBottom > 600);
+  });
+
   it("treats print headers without embedded page content as sparse PDF text", () => {
     assert.equal(isSparsePdfText([
       "2026/7/18 17:44 \u9009\u8bfe\u7ed3\u679c",
