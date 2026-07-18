@@ -10,6 +10,7 @@ import { normalizeSemesterStart } from "@/lib/semester/default-semester";
 import { route } from "@/lib/parser/parser-router";
 import { applyTemplate } from "@/lib/parser/template-matcher";
 import { localRecognize } from "@/lib/parser/local-recognizer";
+import { shouldPreferDeterministicCourseParser } from "@/lib/parser/parser-strategy";
 import { validateCourses, validateGeneralEvents } from "@/lib/parser/validator";
 import type {
   CampusEvent,
@@ -100,7 +101,10 @@ export async function POST(req: NextRequest) {
       warnings?: string[];
     };
 
-    if (hasDeepSeekKey()) {
+    if (shouldPreferDeterministicCourseParser(text, intent)) {
+      recognized = localRecognize(text, intent, source);
+      warnings.push("检测到结构化课表，已保留 OCR 的星期、节次、周次、教师和地点绑定，未使用生成式模型重写。");
+    } else if (hasDeepSeekKey()) {
       try {
         recognized = await recognizeWithDeepSeek(text, intent);
       } catch (error) {
