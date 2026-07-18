@@ -280,7 +280,7 @@ function cropCanvas(source: HTMLCanvasElement, crop: CropBox, scale: number): HT
   return canvas;
 }
 
-function darkMask(canvas: HTMLCanvasElement, threshold = 245): Uint8Array {
+function darkMask(canvas: HTMLCanvasElement, threshold = 253): Uint8Array {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("图片处理失败");
   const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -360,7 +360,7 @@ export function detectTimetableGridForTest(
   for (let index = 0; index < mask.length; index += 1) {
     const offset = index * 4;
     const gray = rgba[offset] * 0.299 + rgba[offset + 1] * 0.587 + rgba[offset + 2] * 0.114;
-    mask[index] = gray < 245 ? 1 : 0;
+    mask[index] = gray < 253 ? 1 : 0;
   }
   return detectTimetableGrid(mask, width, height);
 }
