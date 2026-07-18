@@ -376,31 +376,6 @@ export function detectTimetableGridForTest(
   return detectTimetableGrid(mask, width, height);
 }
 
-function tableBoxFromMask(mask: Uint8Array, width: number, height: number): CropBox | undefined {
-  let minX = width;
-  let minY = height;
-  let maxX = -1;
-  let maxY = -1;
-
-  for (let y = 0; y < height; y += 1) {
-    for (let x = 0; x < width; x += 1) {
-      if (!mask[y * width + x]) continue;
-      minX = Math.min(minX, x);
-      minY = Math.min(minY, y);
-      maxX = Math.max(maxX, x);
-      maxY = Math.max(maxY, y);
-    }
-  }
-
-  if (maxX < minX || maxY < minY) return undefined;
-  const pad = 20;
-  const sx = Math.max(0, minX - pad);
-  const sy = Math.max(0, minY - pad);
-  const ex = Math.min(width, maxX + pad);
-  const ey = Math.min(height, maxY + pad);
-  return { sx, sy, sw: Math.max(1, ex - sx), sh: Math.max(1, ey - sy) };
-}
-
 function lineGroups(counts: number[], threshold: number, minLength = 1): LineGroup[] {
   const found: LineGroup[] = [];
   let start: number | undefined;
@@ -424,26 +399,6 @@ function sumColumns(mask: Uint8Array, width: number, height: number): number[] {
     for (let x = 0; x < width; x += 1) counts[x] += mask[y * width + x];
   }
   return counts;
-}
-
-function sumRows(mask: Uint8Array, width: number, height: number): number[] {
-  const counts = Array.from({ length: height }, () => 0);
-  for (let y = 0; y < height; y += 1) {
-    let count = 0;
-    for (let x = 0; x < width; x += 1) count += mask[y * width + x];
-    counts[y] = count;
-  }
-  return counts;
-}
-
-function periodBoundaries(rowLines: number[]): number[] {
-  if (rowLines.length < 14) return [];
-  const core = rowLines.slice(1, -1);
-  if (core.length >= 14) {
-    const gaps = core.slice(0, Math.min(6, core.length)).map((line, index) => core[index + 1] - line);
-    if (gaps.length >= 5 && Math.max(...gaps.slice(0, 4)) <= 32 && gaps[4] >= 55) core.splice(3, 1);
-  }
-  return core.length >= 13 ? core.slice(0, 13) : [];
 }
 
 function regionDarkCount(mask: Uint8Array, width: number, x0: number, y0: number, x1: number, y1: number): number {
@@ -624,6 +579,7 @@ function compactRecognizedText(value: string): string {
     .replace(/数\s*字\s*经\s*济/g, "数字经济")
     .replace(/大\s*学\s*物\s*理/g, "大学物理")
     .replace(/概\s*率\s*论\s*与\s*数\s*理\s*统\s*计\s*B/g, "概率论与数理统计B")
+    .replace(/\b(\d{1,2})\s*[-~]\s*(1[0-9])5\b/g, "$1-$2周")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -658,6 +614,44 @@ function fallbackCellText(text: string): string {
     .replace(/师\s*[.:：]?\s*/g, " 教师:")
     .replace(/[，,；;。]+$/g, "")
     .trim();
+}
+
+export function recognizedCourseDetailLinesForTest(text: string): string {
+  const normalized = compactRecognizedText(text).replace(/\s*>>\s*/g, ">>");
+  const starts: number[] = [];
+  const courseNumber = /\d{6,12}\s/g;
+  let numberMatch: RegExpExecArray | null;
+  while ((numberMatch = courseNumber.exec(normalized))) {
+    if (numberMatch.index === 0 || !/\d/.test(normalized[numberMatch.index - 1])) starts.push(numberMatch.index);
+  }
+  const rows = starts.map((start, index) => normalized.slice(start, starts[index + 1] ?? normalized.length));
+  const lines: string[] = [];
+
+  for (const row of rows) {
+    const schedule = row.match(/((?:第)?\s*\d{1,2}(?:\s*[-~至到]\s*\d{1,2})?\s*周(?:\s*[单双]周)?)>>星期([一二三四五六日天])>>(\d{1,2})\s*[-~至到]\s*(\d{1,2})节/);
+    if (!schedule) continue;
+    const prefix = row.replace(/^\d{6,12}\s*/, "");
+    const name = prefix.split(/(?:日历|大纲)/, 1)[0]
+      .replace(/^[\s:：|]+|[\s:：|]+$/g, "")
+      .trim();
+    if (!name || /^(?:课程号|课序号|课程名)$/.test(name)) continue;
+
+    const afterSchedule = row.slice((schedule.index ?? 0) + schedule[0].length);
+    const locationMatch = afterSchedule.match(/\s+([^\n]+?)(?=\s+\d{6,12}\b|$)/);
+    const location = locationMatch?.[1]
+      .replace(/>>/g, "")
+      .replace(/\s+/g, "")
+      .replace(/[+|]+$/g, "");
+    lines.push([
+      `周${schedule[2]}`,
+      `${schedule[3]}-${schedule[4]}节`,
+      name,
+      location,
+      schedule[1].replace(/\s+/g, ""),
+    ].filter(Boolean).join(" "));
+  }
+
+  return lines.join("\n");
 }
 
 export function recognizedTimetableCellLinesForTest(cells: Array<{
@@ -764,7 +758,8 @@ export async function recognizeImageInBrowser(
     }
 
     const composedCells = composeCellLines(recognizedCells);
-    const cellLines = [composedCells, bestDetail?.text].filter(Boolean).join("\n");
+    const detailLines = bestDetail ? recognizedCourseDetailLinesForTest(bestDetail.text) : "";
+    const cellLines = [composedCells, detailLines].filter(Boolean).join("\n");
     if (cellLines.split("\n").filter(Boolean).length >= 3) {
       return {
         success: true,

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { composeImageOcrText } from "../../src/lib/ocr/image-ocr.ts";
-import { recognizedTimetableCellLinesForTest } from "../../src/lib/ocr/browser-ocr.ts";
+import { recognizedCourseDetailLinesForTest, recognizedTimetableCellLinesForTest } from "../../src/lib/ocr/browser-ocr.ts";
 import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
 import { parseWithLocalFallback } from "../../src/lib/parser/network-parse-fallback.ts";
 import { shouldPreferDeterministicCourseParser } from "../../src/lib/parser/parser-strategy.ts";
@@ -16,6 +16,19 @@ import {
 } from "../../src/lib/ui/event-format.ts";
 
 describe("campus event flow", () => {
+  it("splits repeated course-information rows into independent week arrangements", () => {
+    const text = recognizedCourseDetailLinesForTest([
+      "104782020 新诗与人生：生命的韵味 日历 大纲 01 5-6周>>星期一>>10-12节 江安>>一教B座>>B101",
+      "104782020 新诗与人生：生命的韵味 日历 大纲 01 第7周>>星期一>>10-12节 江安>>一教B座>>B101",
+      "104782020 新诗与人生：生命的韵味 日历 大纲 01 10-12周双周>>星期一>>10-12节 江安>>一教B座>>B101",
+    ].join(" "));
+    const result = localRecognize(text, "COURSE", "PDF");
+
+    assert.equal(result.events.length, 3);
+    assert.deepEqual(result.events.map((event) => event.course?.weekType), ["EVERY_WEEK", "SPECIFIC_WEEKS", "EVEN_WEEK"]);
+    assert.ok(result.events.every((event) => event.course?.dayOfWeek === 1 && event.course.periodStart === 10 && event.course.classroom === "江安一教B座B101"));
+  });
+
   it("does not send structured timetable OCR back through a generative parser", () => {
     const structured = [
       "周一 3-4节 体育-3跆拳道 教师:谢云龙 1-12周 地点:江安体育场体育馆4楼",
