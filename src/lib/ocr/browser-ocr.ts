@@ -639,6 +639,7 @@ export function recognizedCourseDetailLinesForTest(text: string): string {
     const afterSchedule = row.slice((schedule.index ?? 0) + schedule[0].length);
     const locationMatch = afterSchedule.match(/\s+([^\n]+?)(?=\s+\d{6,12}\b|$)/);
     const location = locationMatch?.[1]
+      .split(/(?:课程号|课序号|课程名|实习安排)/, 1)[0]
       .replace(/>>/g, "")
       .replace(/\s+/g, "")
       .replace(/[+|]+$/g, "");
