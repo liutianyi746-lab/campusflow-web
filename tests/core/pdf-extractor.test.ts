@@ -10,6 +10,55 @@ import { extractPdfTextWithPdfJs } from "../../src/lib/pdf/pdfjs-fallback-extrac
 import { isSparsePdfText } from "../../src/lib/pdf/pdf-text-quality.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
 
+type ExpectedCourse = {
+  name: string;
+  teacher: string;
+  dayOfWeek: number;
+  periodStart: number;
+  periodEnd: number;
+  weekStart: number;
+  weekEnd: number;
+  weekType: string;
+  specificWeeks?: number[];
+  location: string;
+};
+
+const courseSelectionGroundTruth = JSON.parse(
+  readFileSync("tests/fixtures/course-selection-ground-truth.json", "utf8"),
+) as ExpectedCourse[];
+
+function courseRecord(event: ReturnType<typeof localRecognize>["events"][number]): ExpectedCourse | undefined {
+  if (!event.course) return undefined;
+  return {
+    name: event.course.courseName,
+    teacher: event.course.teacher ?? "",
+    dayOfWeek: event.course.dayOfWeek,
+    periodStart: event.course.periodStart,
+    periodEnd: event.course.periodEnd,
+    weekStart: event.course.weekStart,
+    weekEnd: event.course.weekEnd,
+    weekType: event.course.weekType,
+    specificWeeks: event.course.specificWeeks,
+    location: event.course.classroom ?? "",
+  };
+}
+
+function stableRecord(record: ExpectedCourse): string {
+  const name = record.name.replace(/_\d{2}$/, "").replace(/（I{1,3}）/g, "");
+  return JSON.stringify({
+    name,
+    teacher: record.teacher,
+    dayOfWeek: record.dayOfWeek,
+    periodStart: record.periodStart,
+    periodEnd: record.periodEnd,
+    weekStart: record.weekStart,
+    weekEnd: record.weekEnd,
+    weekType: record.weekType,
+    specificWeeks: record.specificWeeks ?? [],
+    location: record.location,
+  });
+}
+
 describe("pdf schedule extraction", () => {
   it("treats print headers without embedded page content as sparse PDF text", () => {
     assert.equal(isSparsePdfText([
@@ -27,7 +76,12 @@ describe("pdf schedule extraction", () => {
 
     assert.ok(extracted);
     assert.equal(isSparsePdfText(extracted.ocrText), false);
-    assert.match(extracted.ocrText, /(?:\u6982\u7387\u7edf\u8ba1|\u5de5\u7a0b\u6570\u5b66|\u5927\u5b66\u7269\u7406)/);
+    const recognized = localRecognize(extracted.ocrText, "COURSE", "PDF");
+    const actual = recognized.events.map(courseRecord).filter((record): record is ExpectedCourse => Boolean(record));
+    assert.deepEqual(actual.map(stableRecord).sort(), courseSelectionGroundTruth.map(stableRecord).sort());
+    assert.equal(actual.length, 20, "must retain every independent week arrangement without duplicates");
+    assert.ok(actual.every((record) => !/(?:教学日历|教学大纲|课程信息|实习课安排|zhjw|打印时间)/.test(record.name)));
+    assert.ok(recognized.warnings.some((warning) => /低置信度|不确定/.test(warning)) || actual.every((record) => record.teacher && record.location));
   });
 
   it("extracts a real education-system PDF schedule into parseable course text", async () => {

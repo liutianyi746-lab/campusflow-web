@@ -19,7 +19,19 @@ def groups(counts, threshold, min_len=1):
     return found
 
 
-def save_ocr_target(image, path, scale=3):
+def save_ocr_target(image, path, scale=3, trim=False):
+    if trim and image.width > 20 and image.height > 20:
+        inset = image.crop((8, 8, image.width - 8, image.height - 8))
+        values = np.array(ImageOps.grayscale(inset))
+        ys, xs = np.where(values < 225)
+        if len(xs):
+            margin = 8
+            image = inset.crop((
+                max(0, int(xs.min()) - margin),
+                max(0, int(ys.min()) - margin),
+                min(inset.width, int(xs.max()) + margin),
+                min(inset.height, int(ys.max()) + margin),
+            ))
     image = image.resize((max(1, image.width * scale), max(1, image.height * scale)), Image.Resampling.LANCZOS)
     gray = ImageOps.grayscale(image)
     gray = ImageOps.autocontrast(gray)
@@ -52,6 +64,35 @@ def period_boundaries(row_lines):
         if len(gaps) >= 5 and max(gaps[:4]) <= 32 and gaps[4] >= 55:
             del core[3]
     return core[:13] if len(core) >= 13 else []
+
+
+def timetable_geometry(line_dark):
+    """Find the main 7-day grid without treating merged-cell dividers as day columns."""
+    height, width = line_dark.shape
+    full_rows = [item[2] for item in groups(line_dark.sum(axis=1), width * 0.9)]
+    if len(full_rows) < 2:
+        return None
+
+    header_top, header_bottom = full_rows[0], full_rows[1]
+    candidates = [item[2] for item in groups(line_dark.sum(axis=1), width * 0.45) if item[2] > header_bottom]
+    early_gaps = [b - a for a, b in zip(candidates[:6], candidates[1:7]) if 100 <= b - a <= 190]
+    if not early_gaps:
+        return None
+    period_height = int(round(float(np.median(early_gaps))))
+    main_bottom = header_bottom + period_height * 12
+    main_bottom = min(full_rows, key=lambda line: abs(line - main_bottom))
+    if abs(main_bottom - (header_bottom + period_height * 12)) > period_height // 2:
+        return None
+
+    main = line_dark[header_top:main_bottom + 1, :]
+    vertical = groups(main.sum(axis=0), main.shape[0] * 0.9)
+    x_lines = [item[2] for item in vertical]
+    if len(x_lines) < 10:
+        return None
+    day_lines = x_lines[-8:]
+    bounds = [int(round(header_bottom + period_height * index)) for index in range(13)]
+    bounds[-1] = main_bottom
+    return header_top, header_bottom, main_bottom, day_lines, bounds
 
 
 def build_exam_row_targets(crop, dark, row_lines, output_dir, targets):
@@ -120,23 +161,22 @@ def build_targets(input_path, output_dir):
     save_ocr_target(crop, full_path, 3)
     targets.append({"kind": "full", "path": full_path})
 
-    vertical = groups(line_dark.sum(axis=0), height * 0.55)
-    horizontal = groups(line_dark.sum(axis=1), width * 0.55)
-    x_lines = [item[2] for item in vertical]
-    row_lines = [item[2] for item in horizontal]
-
-    if len(x_lines) < 10 or len(row_lines) < 14:
+    geometry = timetable_geometry(line_dark)
+    if not geometry:
+        horizontal = groups(line_dark.sum(axis=1), width * 0.55)
+        row_lines = [item[2] for item in horizontal]
         build_exam_row_targets(crop, dark, row_lines, output_dir, targets)
         return targets
 
-    day_lines = x_lines[2:10]
-    bounds = period_boundaries(row_lines)
-    if len(day_lines) != 8 or len(bounds) != 13:
-        build_exam_row_targets(crop, dark, row_lines, output_dir, targets)
-        return targets
+    header_top, header_bottom, main_bottom, day_lines, bounds = geometry
+
+    for column_index, (x0, x1) in enumerate(zip(day_lines[:-1], day_lines[1:]), start=1):
+        header = crop.crop((x0 + 3, header_top + 3, x1 - 3, header_bottom - 3))
+        header_path = os.path.join(output_dir, f"weekday_header_{column_index}.png")
+        save_ocr_target(header, header_path, 4)
+        targets.append({"kind": "weekdayHeader", "path": header_path, "columnIndex": column_index})
 
     period_ranges = [(index + 1, bounds[index], bounds[index + 1]) for index in range(12)]
-    row_line_lookup = set(row_lines)
 
     for day_index in range(7):
         x0 = day_lines[day_index] + 2
@@ -144,11 +184,13 @@ def build_targets(input_path, output_dir):
         if x1 <= x0:
             continue
         col_width = x1 - x0
-        counts = line_dark[:, x0:x1].sum(axis=1)
+        counts = line_dark[header_bottom:main_bottom + 1, x0:x1].sum(axis=1)
         cell_lines = []
-        for line in row_line_lookup:
-            lo = max(0, line - 2)
-            hi = min(len(counts), line + 3)
+        candidate_lines = [item[2] for item in groups(counts, col_width * 0.85)]
+        for relative_line in candidate_lines:
+            line = header_bottom + relative_line
+            lo = max(0, relative_line - 2)
+            hi = min(len(counts), relative_line + 3)
             if counts[lo:hi].max() >= col_width * 0.85:
                 cell_lines.append(line)
         for line in (bounds[0], bounds[-1]):
@@ -166,17 +208,36 @@ def build_targets(input_path, output_dir):
             if not periods:
                 continue
             pad = 4
-            cell = crop.crop((max(0, x0 - pad), max(0, y0 - pad), min(width, x1 + pad), min(height, y1 + pad)))
-            filename = f"cell_d{day_index + 1}_p{periods[0]}_{periods[-1]}.png"
-            cell_path = os.path.join(output_dir, filename)
-            save_ocr_target(cell, cell_path, 4)
-            targets.append({
-                "kind": "cell",
-                "path": cell_path,
-                "dayOfWeek": day_index + 1,
-                "periodStart": periods[0],
-                "periodEnd": periods[-1],
-            })
+            local = line_dark[y0:y1 + 1, x0:x1 + 1]
+            local_vertical = [item[2] for item in groups(local.sum(axis=0), local.shape[0] * 0.82)]
+            splits = [0] + [line for line in local_vertical if 12 < line < col_width - 12] + [col_width]
+            for split_index, (left, right) in enumerate(zip(splits[:-1], splits[1:]), start=1):
+                if right - left < 45:
+                    continue
+                part_x0, part_x1 = x0 + left, x0 + right
+                part_inner = dark[y0 + 3:y1 - 3, part_x0 + 3:part_x1 - 3]
+                if part_inner.size == 0 or part_inner.sum() < 60:
+                    continue
+                cell = crop.crop((max(0, part_x0 - pad), max(0, y0 - pad), min(width, part_x1 + pad), min(height, y1 + pad)))
+                filename = f"cell_c{day_index + 1}_p{periods[0]}_{periods[-1]}_{split_index}.png"
+                cell_path = os.path.join(output_dir, filename)
+                save_ocr_target(cell, cell_path, 5)
+                targets.append({
+                    "kind": "cell",
+                    "path": cell_path,
+                    "columnIndex": day_index + 1,
+                    "periodStart": periods[0],
+                    "periodEnd": periods[-1],
+                })
+
+    lower_rows = [item[2] for item in groups(line_dark.sum(axis=1), width * 0.9) if item[2] > main_bottom]
+    if len(lower_rows) >= 7:
+        table_lines = lower_rows[1:8]
+        for row_index, (y0, y1) in enumerate(zip(table_lines[1:], table_lines[2:]), start=1):
+            row = crop.crop((0, y0 + 2, width, y1 - 2))
+            row_path = os.path.join(output_dir, f"course_detail_row_{row_index}.png")
+            save_ocr_target(row, row_path, 3)
+            targets.append({"kind": "courseDetailRow", "path": row_path, "rowIndex": row_index})
 
     return targets
 

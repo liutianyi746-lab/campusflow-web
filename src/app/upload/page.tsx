@@ -8,6 +8,7 @@ import { useEventStore } from "@/stores/use-event-store";
 import { useStepStore } from "@/stores/use-step-store";
 import { apiUrl } from "@/lib/http/api-client";
 import { extractPdfInBrowser, isSparsePdfText } from "@/lib/pdf/browser-pdf";
+import { parseWithLocalFallback } from "@/lib/parser/network-parse-fallback";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
@@ -402,23 +403,36 @@ export default function UploadPage() {
         }
 
         setStatus("正在生成时间事件...");
-        const parseResponse = await fetch(apiUrl("/api/parse"), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ocrText: uploadResponse.data.ocrText,
-            intent: selectedPreset.intent,
-            source: uploadResponse.data.source ?? selectedPreset.source,
-            semesterStart: resolvedSemesterStart,
-            scheduleTemplate,
-          }),
-        }).then((response) => response.json());
+        const eventSource = uploadResponse.data.source ?? selectedPreset.source;
+        let parsedEvents: CampusEvent[];
+        try {
+          const parseResponse = await fetch(apiUrl("/api/parse"), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ocrText: uploadResponse.data.ocrText,
+              intent: selectedPreset.intent,
+              source: eventSource,
+              semesterStart: resolvedSemesterStart,
+              scheduleTemplate,
+            }),
+          }).then((response) => response.json());
 
-        if (!parseResponse.success) {
-          throw new Error(parseResponse.error?.message ?? "事件生成失败");
+          if (!parseResponse.success) {
+            throw new Error(parseResponse.error?.message ?? "事件生成失败");
+          }
+          parsedEvents = parseResponse.data.events ?? [];
+        } catch {
+          setStatus("网络解析不可用，正在使用本地规则生成课程...");
+          parsedEvents = parseWithLocalFallback(
+            uploadResponse.data.ocrText,
+            selectedPreset.intent,
+            eventSource,
+            scheduleTemplate,
+            resolvedSemesterStart,
+          );
         }
 
-        const parsedEvents = parseResponse.data.events ?? [];
         if (!parsedEvents.length) {
           throw new Error("没有识别到可生成的时间事件，请补充日期、时间、课程或地点后再试。");
         }

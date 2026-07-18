@@ -1,0 +1,22 @@
+[
+  {"name":"概率统计（理工）_25","teacher":"常寅山","dayOfWeek":2,"periodStart":1,"periodEnd":2,"weekStart":1,"weekEnd":17,"weekType":"EVERY_WEEK","location":"江安一教A座A507"},
+  {"name":"概率统计（理工）_25","teacher":"常寅山","dayOfWeek":4,"periodStart":1,"periodEnd":2,"weekStart":1,"weekEnd":17,"weekType":"EVERY_WEEK","location":"江安一教A座A316"},
+  {"name":"体育-3跆拳道_06","teacher":"谢云龙","dayOfWeek":1,"periodStart":3,"periodEnd":4,"weekStart":1,"weekEnd":12,"weekType":"EVERY_WEEK","location":"江安体育场体育馆4楼"},
+  {"name":"工程数学数值计算方法_02","teacher":"刘长丽","dayOfWeek":2,"periodStart":3,"periodEnd":4,"weekStart":1,"weekEnd":17,"weekType":"EVERY_WEEK","location":"江安综合楼C座C107"},
+  {"name":"跨文化实用交际_30","teacher":"外聘22（外语）","dayOfWeek":3,"periodStart":3,"periodEnd":4,"weekStart":1,"weekEnd":16,"weekType":"EVERY_WEEK","location":"江安综合楼B座B508"},
+  {"name":"工程训练（I）_09","teacher":"夏慧","dayOfWeek":5,"periodStart":1,"periodEnd":4,"weekStart":1,"weekEnd":17,"weekType":"EVERY_WEEK","location":"江安工程训练中心工程训练中心"},
+  {"name":"电磁场_06","teacher":"王为","dayOfWeek":1,"periodStart":5,"periodEnd":7,"weekStart":1,"weekEnd":16,"weekType":"EVERY_WEEK","location":"江安一教C座C102"},
+  {"name":"模拟电子技术基础实验（II）_09","teacher":"印月","dayOfWeek":2,"periodStart":5,"periodEnd":7,"weekStart":3,"weekEnd":17,"weekType":"ODD_WEEK","location":"江安实验室二基楼A505"},
+  {"name":"模拟电子技术基础（II）_05","teacher":"黄晶","dayOfWeek":3,"periodStart":5,"periodEnd":7,"weekStart":1,"weekEnd":12,"weekType":"EVERY_WEEK","location":"江安一教B座B201"},
+  {"name":"大学物理实验（理工）III-2_48","teacher":"何原","dayOfWeek":4,"periodStart":5,"periodEnd":8,"weekStart":5,"weekEnd":8,"weekType":"EVERY_WEEK","location":"江安实验室二基楼A403"},
+  {"name":"形势与政策-3_45","teacher":"任杰","dayOfWeek":5,"periodStart":8,"periodEnd":9,"weekStart":3,"weekEnd":9,"weekType":"ODD_WEEK","location":"江安综合楼C座C503"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":2,"weekEnd":3,"weekType":"EVERY_WEEK","location":"江安一教B座B101"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":4,"weekEnd":11,"weekType":"SPECIFIC_WEEKS","specificWeeks":[4,11],"location":"江安一教B座B101"},
+  {"name":"马克思主义基本原理_50","teacher":"张心语","dayOfWeek":2,"periodStart":10,"periodEnd":12,"weekStart":1,"weekEnd":16,"weekType":"EVERY_WEEK","location":"江安一教A座A205"},
+  {"name":"大学物理（理工）II-2_13","teacher":"张软玉","dayOfWeek":3,"periodStart":10,"periodEnd":12,"weekStart":1,"weekEnd":16,"weekType":"EVERY_WEEK","location":"江安一教B座B505"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":5,"weekEnd":6,"weekType":"EVERY_WEEK","location":"江安一教B座B101"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":7,"weekEnd":7,"weekType":"SPECIFIC_WEEKS","specificWeeks":[7],"location":"江安一教B座B101"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":8,"weekEnd":9,"weekType":"EVERY_WEEK","location":"江安一教B座B101"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":10,"weekEnd":12,"weekType":"EVEN_WEEK","location":"江安一教B座B101"},
+  {"name":"新诗与人生：生命的韵味_01","teacher":"李怡、刘福春、周文、姜飞、欧阳月姣、李扬、谢君","dayOfWeek":1,"periodStart":10,"periodEnd":12,"weekStart":13,"weekEnd":13,"weekType":"SPECIFIC_WEEKS","specificWeeks":[13],"location":"江安一教B座B101"}
+]
