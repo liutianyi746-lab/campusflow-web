@@ -13,7 +13,7 @@ export type BrowserOcrResult = {
 type CanvasVariant = {
   name: string;
   canvas: HTMLCanvasElement;
-  kind: "full" | "table" | "cell";
+  kind: "full" | "table" | "cell" | "detail";
   dayOfWeek?: number;
   periodStart?: number;
   periodEnd?: number;
@@ -33,6 +33,7 @@ type LineGroup = {
 type TimetableDetection = {
   table: HTMLCanvasElement;
   cells: CanvasVariant[];
+  detail?: CanvasVariant;
 };
 
 type TimetableGrid = {
@@ -453,6 +454,16 @@ function regionDarkCount(mask: Uint8Array, width: number, x0: number, y0: number
   return count;
 }
 
+function maxHorizontalDarkCount(mask: Uint8Array, width: number, height: number, x0: number, x1: number, y: number): number {
+  let best = 0;
+  for (let py = Math.max(0, y - 2); py < Math.min(height, y + 3); py += 1) {
+    let count = 0;
+    for (let x = Math.max(0, x0); x < Math.min(width, x1); x += 1) count += mask[py * width + x];
+    best = Math.max(best, count);
+  }
+  return best;
+}
+
 function detectTimetable(image: HTMLImageElement): TimetableDetection | undefined {
   const original = imageToCanvas(image);
   const originalMask = darkMask(original);
@@ -491,7 +502,7 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
 
     const columnWidth = x1 - x0;
     const cellLines = bounds.filter((line) => {
-      const count = regionDarkCount(mask, width, x0, Math.max(0, line - 2), x1, Math.min(height, line + 3));
+      const count = maxHorizontalDarkCount(mask, width, height, x0, x1, line);
       return count >= columnWidth * 0.72;
     });
     cellLines.push(bounds[0], bounds[bounds.length - 1]);
@@ -536,9 +547,21 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
   }
 
   if (cells.length < 3) return undefined;
+  const detailTop = Math.min(original.height, grid.bottom + Math.round(original.height * 0.012));
+  const detailBottom = Math.min(original.height, grid.bottom + Math.round(original.height * 0.19));
   return {
     table: cropCanvas(tableRaw, { sx: 0, sy: 0, sw: width, sh: height }, Math.max(1, Math.min(3, 2200 / width))),
     cells,
+    detail: detailBottom - detailTop > 80 ? {
+      name: "course-details",
+      canvas: cropCanvas(original, {
+        sx: box.sx,
+        sy: detailTop,
+        sw: box.sw,
+        sh: detailBottom - detailTop,
+      }, Math.max(1.4, Math.min(3, 2400 / box.sw))),
+      kind: "detail",
+    } : undefined,
   };
 }
 
@@ -557,6 +580,7 @@ function variantsFor(image: HTMLImageElement): CanvasVariant[] {
   if (timetable) {
     variants.push({ name: "detected-table", canvas: timetable.table, kind: "table" });
     variants.push(...timetable.cells);
+    if (timetable.detail) variants.push(timetable.detail);
   }
 
   if (height / width > 1.25) {
@@ -685,6 +709,7 @@ function composeCellLines(cells: Array<{ variant: CanvasVariant; text: string }>
 
 function statusFor(variant: CanvasVariant): string {
   if (variant.kind === "cell") return `正在识别课表单元格 ${variant.name.replace("cell-", "")}...`;
+  if (variant.kind === "detail") return "正在识别下方课程信息表...";
   return `正在识别图片 ${variant.kind === "table" ? "表格区域" : "文字区域"}...`;
 }
 
@@ -708,6 +733,7 @@ export async function recognizeImageInBrowser(
     });
 
     let best: { text: string; confidence: number; score: number } | null = null;
+    let bestDetail: { text: string; confidence: number; score: number } | null = null;
     const recognizedCells: Array<{ variant: CanvasVariant; text: string; confidence: number }> = [];
 
     for (const psm of [PSM.AUTO, PSM.SPARSE_TEXT]) {
@@ -718,6 +744,7 @@ export async function recognizeImageInBrowser(
 
       for (const variant of variants) {
         if (variant.kind === "cell" && psm !== PSM.SPARSE_TEXT) continue;
+        if (variant.kind === "detail" && psm !== PSM.AUTO) continue;
         onStatus?.(statusFor(variant));
         const result = await worker.recognize(variant.canvas);
         const text = compactRecognizedText(result.data.text);
@@ -729,11 +756,15 @@ export async function recognizeImageInBrowser(
           + (psm === PSM.SPARSE_TEXT ? 8 : 0);
 
         if (variant.kind === "cell" && text) recognizedCells.push({ variant, text, confidence });
+        if (variant.kind === "detail" && text && (!bestDetail || score > bestDetail.score)) {
+          bestDetail = { text, confidence, score };
+        }
         if (!best || score > best.score) best = { text, confidence, score };
       }
     }
 
-    const cellLines = composeCellLines(recognizedCells);
+    const composedCells = composeCellLines(recognizedCells);
+    const cellLines = [composedCells, bestDetail?.text].filter(Boolean).join("\n");
     if (cellLines.split("\n").filter(Boolean).length >= 3) {
       return {
         success: true,
