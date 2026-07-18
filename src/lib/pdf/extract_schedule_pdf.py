@@ -1,6 +1,7 @@
 ﻿import datetime
 import json
 import re
+import os
 import sys
 
 try:
@@ -104,7 +105,33 @@ def infer_semester_start(text):
     return date.isoformat()
 
 
+def extract_embedded_images(path, output_dir):
+    if not output_dir:
+        return []
+    try:
+        from pypdf import PdfReader
+    except Exception:
+        return []
+
+    os.makedirs(output_dir, exist_ok=True)
+    extracted = []
+    reader = PdfReader(path)
+    for page_index, page in enumerate(reader.pages[:3]):
+        candidates = sorted(
+            list(page.images),
+            key=lambda item: item.image.width * item.image.height,
+            reverse=True,
+        )
+        for image_index, image in enumerate(candidates[:2]):
+            if image.image.width * image.image.height < 250000:
+                continue
+            image_path = os.path.abspath(os.path.join(output_dir, f"page-{page_index + 1}-image-{image_index + 1}.png"))
+            image.image.convert("RGB").save(image_path, "PNG")
+            extracted.append(image_path)
+    return extracted
+
 def main(path):
+    embedded_images = extract_embedded_images(path, sys.argv[2] if len(sys.argv) > 2 else None)
     all_lines = []
     fallback_text = []
     with pdfplumber.open(path) as pdf:
@@ -127,10 +154,10 @@ def main(path):
 
     if deduped:
         text = "课程表\n" + "\n".join(deduped)
-        print(json.dumps({"success": True, "text": text, "mode": "table", "count": len(deduped), "semesterStart": semester_start}, ensure_ascii=False))
+        print(json.dumps({"success": True, "text": text, "mode": "table", "count": len(deduped), "semesterStart": semester_start, "embeddedImages": embedded_images}, ensure_ascii=False))
         return
 
-    print(json.dumps({"success": bool(source_text), "text": source_text, "mode": "text", "count": 0, "semesterStart": semester_start}, ensure_ascii=False))
+    print(json.dumps({"success": bool(source_text), "text": source_text, "mode": "text", "count": 0, "semesterStart": semester_start, "embeddedImages": embedded_images}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

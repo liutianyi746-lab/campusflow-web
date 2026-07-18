@@ -1,4 +1,5 @@
 import type { BrowserOcrResult } from "@/lib/ocr/browser-ocr";
+import { recognizeImageInBrowser } from "@/lib/ocr/browser-ocr";
 import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "@/lib/pdf/direct-schedule-extractor";
 
 type TextItem = {
@@ -15,6 +16,12 @@ type PdfJsModule = {
       numPages: number;
       getPage: (pageNumber: number) => Promise<{
         getTextContent: () => Promise<{ items: TextItem[] }>;
+        getViewport: (options: { scale: number }) => { width: number; height: number };
+        render: (options: {
+          canvasContext: CanvasRenderingContext2D;
+          canvas: HTMLCanvasElement;
+          viewport: { width: number; height: number };
+        }) => { promise: Promise<void> };
       }>;
     }>;
   };
@@ -66,6 +73,34 @@ function clean(value: string): string {
 
 function displayClean(value: string): string {
   return clean(value).replace(/▲/g, "").trim();
+}
+
+export function isSparsePdfText(value: string): boolean {
+  const meaningful = value
+    .replace(/https?:\/\/\S+/gi, " ")
+    .replace(/\b\S+\.scu\.edu\.cn\S*/gi, " ")
+    .replace(/\b20\d{2}[\/-]\d{1,2}[\/-]\d{1,2}\b/g, " ")
+    .replace(/\b\d{1,2}:\d{2}\b/g, " ")
+    .replace(/选课结果|课程表|第\s*\d+\s*页|\d+\s*\/\s*\d+/g, " ")
+    .replace(/[^\u4e00-\u9fa5A-Za-z0-9]/g, "");
+  const scheduleSignals = (value.match(/(?:星期[一二三四五六日天]|周[一二三四五六日天]|\d{1,2}\s*[-~至到]\s*\d{1,2}\s*节|教师|场地)/g) ?? []).length;
+  return meaningful.length < 30 && scheduleSignals < 2;
+}
+
+type BrowserPdfPage = Awaited<ReturnType<Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>["getPage"]>>;
+
+async function renderPageToImageFile(page: BrowserPdfPage, pageNumber: number): Promise<File> {
+  const viewport = page.getViewport({ scale: 2.4 });
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.ceil(viewport.width);
+  canvas.height = Math.ceil(viewport.height);
+  const canvasContext = canvas.getContext("2d", { willReadFrequently: true });
+  if (!canvasContext) throw new Error("PDF 页面渲染失败");
+  await page.render({ canvasContext, canvas, viewport }).promise;
+  const blob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob((result) => result ? resolve(result) : reject(new Error("PDF 页面转图片失败")), "image/png");
+  });
+  return new File([blob], "pdf-page-" + pageNumber + ".png", { type: "image/png" });
 }
 
 async function fileHash(file: File): Promise<string> {
@@ -178,7 +213,7 @@ export async function extractPdfInBrowser(
     }
 
     const raw = extractRawTextFromPdfContent(data);
-    if (raw) {
+    if (raw && !isSparsePdfText(raw.text)) {
       return {
         success: true,
         ocrText: raw.text,
@@ -190,7 +225,7 @@ export async function extractPdfInBrowser(
     }
 
     onStatus?.("\u6b63\u5728\u52a0\u8f7d PDF \u89e3\u6790\u5668...");
-    const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as PdfJsModule;
+    const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PdfJsModule;
     const base = assetBase();
     pdfjs.GlobalWorkerOptions.workerSrc = `${base}/pdfjs/pdf.worker.mjs`;
 
@@ -237,6 +272,28 @@ export async function extractPdfInBrowser(
     }
     const rawText = fallbackText.join("\n").trim();
     const ocrText = deduped.length ? `\u8bfe\u7a0b\u8868\n${deduped.join("\n")}` : rawText;
+
+    if (!deduped.length && isSparsePdfText(rawText)) {
+      onStatus?.("PDF 文字层为空，正在识别页面中的课表图片...");
+      const renderedOcr: string[] = [];
+      let confidence = 0;
+      for (let pageNumber = 1; pageNumber <= Math.min(document.numPages, 3); pageNumber += 1) {
+        const page = await document.getPage(pageNumber);
+        const imageFile = await renderPageToImageFile(page, pageNumber);
+        const recognized = await recognizeImageInBrowser(imageFile, onStatus);
+        if (!recognized.success || !recognized.ocrText.trim()) continue;
+        renderedOcr.push(recognized.ocrText.trim());
+        confidence = Math.max(confidence, recognized.confidence);
+      }
+      if (renderedOcr.length) return {
+        success: true,
+        ocrText: renderedOcr.join("\n"),
+        confidence,
+        processingTimeMs: Date.now() - startedAt,
+        inputHash,
+        source: "PDF",
+      };
+    }
 
     return {
       success: Boolean(ocrText),

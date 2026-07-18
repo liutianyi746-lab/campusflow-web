@@ -1,12 +1,14 @@
 ﻿import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
 import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "./direct-schedule-extractor.ts";
+import { recognizeImage } from "../ocr/image-ocr.ts";
+import { isSparsePdfText } from "./pdf-text-quality.ts";
 import { extractPdfTextWithPdfJs } from "./pdfjs-fallback-extractor.ts";
 
 const execFileAsync = promisify(execFile);
@@ -18,6 +20,7 @@ type PdfExtractionPayload = {
   count?: number;
   semesterStart?: string | null;
   error?: string;
+  embeddedImages?: string[];
 };
 
 export type PdfTextExtraction = {
@@ -66,7 +69,7 @@ function pythonCandidates(): Array<{ command: string; argsPrefix: string[] }> {
   ];
 }
 
-async function runExtractor(pdfPath: string): Promise<PdfExtractionPayload> {
+async function runExtractor(pdfPath: string, imageDir: string): Promise<PdfExtractionPayload> {
   const scriptPath = path.join(process.cwd(), "src", "lib", "pdf", "extract_schedule_pdf.py");
   const errors: string[] = [];
 
@@ -74,7 +77,7 @@ async function runExtractor(pdfPath: string): Promise<PdfExtractionPayload> {
     try {
       const { stdout } = await execFileAsync(
         candidate.command,
-        [...candidate.argsPrefix, scriptPath, pdfPath],
+        [...candidate.argsPrefix, scriptPath, pdfPath, imageDir],
         {
           encoding: "utf8",
           maxBuffer: 1024 * 1024 * 8,
@@ -97,16 +100,35 @@ export async function extractPdfText(buffer: Buffer): Promise<PdfTextExtraction 
   if (direct) return direct;
 
   const raw = extractionToResult(extractRawTextFromPdfContent(buffer) ?? {}, buffer, startedAt);
-  if (raw) return raw;
+  if (raw && !isSparsePdfText(raw.ocrText)) return raw;
 
   const dir = await mkdtemp(path.join(os.tmpdir(), "campusflow-pdf-"));
   const pdfPath = path.join(dir, "input.pdf");
 
   try {
     await writeFile(pdfPath, buffer);
-    const payload = await runExtractor(pdfPath);
+    const payload = await runExtractor(pdfPath, dir);
     const pythonResult = extractionToResult(payload, buffer, startedAt);
-    if (pythonResult) return pythonResult;
+    if (pythonResult && !isSparsePdfText(pythonResult.ocrText)) return pythonResult;
+
+    const recognizedPages = [];
+    let ocrConfidence = 0;
+    for (const imagePath of payload.embeddedImages ?? []) {
+      const recognized = await recognizeImage(await readFile(imagePath), "image/png");
+      if (!recognized.success || !recognized.ocrText.trim()) continue;
+      recognizedPages.push(recognized.ocrText.trim());
+      ocrConfidence = Math.max(ocrConfidence, recognized.confidence);
+    }
+    if (recognizedPages.length) {
+      return {
+        ocrText: recognizedPages.join("\n"),
+        confidence: ocrConfidence,
+        inputHash: crypto.createHash("sha256").update(buffer).digest("hex"),
+        processingTimeMs: Date.now() - startedAt,
+        source: "PDF",
+        warnings: ["PDF text layer was incomplete; recognized the embedded page image."],
+      };
+    }
 
     const fallback = await extractPdfTextWithPdfJs(buffer);
     return extractionToResult(fallback, buffer, startedAt, [

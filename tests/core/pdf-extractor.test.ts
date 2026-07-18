@@ -7,9 +7,29 @@ import { localRecognize } from "../../src/lib/parser/local-recognizer.ts";
 import { extractRawTextFromPdfContent, extractScheduleFromPdfContent } from "../../src/lib/pdf/direct-schedule-extractor.ts";
 import { extractPdfText } from "../../src/lib/pdf/pdf-text-extractor.ts";
 import { extractPdfTextWithPdfJs } from "../../src/lib/pdf/pdfjs-fallback-extractor.ts";
+import { isSparsePdfText } from "../../src/lib/pdf/pdf-text-quality.ts";
 import { DEFAULT_SCHEDULE_TEMPLATE } from "../../src/lib/schedule/default-template.ts";
 
 describe("pdf schedule extraction", () => {
+  it("treats print headers without embedded page content as sparse PDF text", () => {
+    assert.equal(isSparsePdfText([
+      "2026/7/18 17:44 \u9009\u8bfe\u7ed3\u679c",
+      "zhjw.scu.edu.cn/student/courseSelect/courseSelectResult/index 1/1",
+    ].join("\n")), true);
+    assert.equal(isSparsePdfText("\u5468\u4e00 1-2\u8282 \u9ad8\u7b49\u6570\u5b66 \u6559\u5e08\u5f20\u8001\u5e08 \u573a\u5730A101"), false);
+  });
+
+  it("OCRs the embedded selection-result image when the PDF text layer is only a print header", async () => {
+    const pdfPath = "C:/Users/32916/Documents/xwechat_files/wxid_mjn1s6jfsbqz22_fa4f/msg/file/2026-07/\u9009\u8bfe\u7ed3\u679c.pdf";
+    if (!existsSync(pdfPath)) return;
+
+    const extracted = await extractPdfText(readFileSync(pdfPath));
+
+    assert.ok(extracted);
+    assert.equal(isSparsePdfText(extracted.ocrText), false);
+    assert.match(extracted.ocrText, /(?:\u6982\u7387\u7edf\u8ba1|\u5de5\u7a0b\u6570\u5b66|\u5927\u5b66\u7269\u7406)/);
+  });
+
   it("extracts a real education-system PDF schedule into parseable course text", async () => {
     const pdfPath = "tmp/pdfs/schedule.pdf";
     if (!existsSync(pdfPath)) return;
