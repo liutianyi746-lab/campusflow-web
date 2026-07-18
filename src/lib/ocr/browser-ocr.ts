@@ -280,6 +280,16 @@ function cropCanvas(source: HTMLCanvasElement, crop: CropBox, scale: number): HT
   return canvas;
 }
 
+function cropCanvasRaw(source: HTMLCanvasElement, crop: CropBox): HTMLCanvasElement {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(crop.sw));
+  canvas.height = Math.max(1, Math.round(crop.sh));
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) throw new Error("图片处理失败");
+  context.drawImage(source, crop.sx, crop.sy, crop.sw, crop.sh, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
 function darkMask(canvas: HTMLCanvasElement, threshold = 253): Uint8Array {
   const context = canvas.getContext("2d", { willReadFrequently: true });
   if (!context) throw new Error("图片处理失败");
@@ -454,7 +464,8 @@ function detectTimetable(image: HTMLImageElement): TimetableDetection | undefine
     sw: grid.xLines[grid.xLines.length - 1] - grid.xLines[0] + 1,
     sh: grid.bottom - grid.top + 1,
   };
-  const tableRaw = cropCanvas(original, box, 1);
+  // 表格线很浅；几何检测必须使用未提亮的像素，OCR 裁剪再单独增强。
+  const tableRaw = cropCanvasRaw(original, box);
   const mask = darkMask(tableRaw);
   const width = tableRaw.width;
   const height = tableRaw.height;
