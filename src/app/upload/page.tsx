@@ -7,7 +7,7 @@ import { StepIndicator } from "@/app/_components/step-indicator";
 import { useEventStore } from "@/stores/use-event-store";
 import { useStepStore } from "@/stores/use-step-store";
 import { apiUrl } from "@/lib/http/api-client";
-import { extractPdfInBrowser } from "@/lib/pdf/browser-pdf";
+import { extractPdfInBrowser, isSparsePdfText } from "@/lib/pdf/browser-pdf";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
@@ -360,7 +360,7 @@ export default function UploadPage() {
         formData.append("file", uploadFile);
         if (isScheduleMode) formData.append("purpose", "schedule");
 
-        const uploadResponse = await uploadFileToBackend(formData).catch((uploadError) => {
+        let uploadResponse = await uploadFileToBackend(formData).catch((uploadError) => {
           if (isPdfUploadFile(uploadFile)) return extractPdfAfterUploadFailure(uploadFile, setStatus);
           throw uploadError;
         });
@@ -369,8 +369,18 @@ export default function UploadPage() {
           throw new Error(uploadResponse.error?.message ?? "文件上传失败");
         }
 
+        if (isPdfUploadFile(uploadFile) && uploadResponse.data?.success === false) {
+          setStatus("PDF 文字层为空，正在识别页面中的课表图片...");
+          uploadResponse = await extractPdfAfterUploadFailure(uploadFile, setStatus);
+        }
+
         if (uploadResponse.data?.success === false) {
           throw new Error(uploadResponse.data.error ?? "图片识别失败，请裁剪清晰后重试。");
+        }
+
+        if (isPdfUploadFile(uploadFile) && isSparsePdfText(uploadResponse.data?.ocrText ?? "")) {
+          setStatus("PDF 文字层不完整，正在识别页面中的课表图片...");
+          uploadResponse = await extractPdfAfterUploadFailure(uploadFile, setStatus);
         }
 
         if (!uploadResponse.data?.ocrText?.trim()) {

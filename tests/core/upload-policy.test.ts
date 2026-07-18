@@ -12,6 +12,20 @@ const browserPdf = readFileSync("src/lib/pdf/browser-pdf.ts", "utf8");
 const mobilePolyfills = readFileSync("src/lib/browser/mobile-polyfills.ts", "utf8");
 
 describe("mobile upload policy", () => {
+  it("renders image-only PDF pages and runs timetable OCR when extracted text is sparse", () => {
+    assert.match(browserPdf, /recognizeImageInBrowser/);
+    assert.match(browserPdf, /page\.render/);
+    assert.match(browserPdf, /isSparsePdfText/);
+    assert.match(uploadPage, /isSparsePdfText/);
+    assert.match(uploadPage, /extractPdfAfterUploadFailure\(uploadFile, setStatus\)/);
+    const pdfFailureFallback = uploadPage.indexOf("isPdfUploadFile(uploadFile) && uploadResponse.data?.success === false");
+    assert.notEqual(pdfFailureFallback, -1);
+    assert.ok(
+      pdfFailureFallback < uploadPage.indexOf("if (uploadResponse.data?.success === false)"),
+      "PDF browser OCR fallback must run before generic OCR failures are thrown",
+    );
+  });
+
   it("lets phone browsers pick images and supports WebP screenshots", () => {
     assert.match(uploadPage, /IMAGE_FILE_ACCEPT = "image\/\*/);
     assert.match(uploadPage, /accept={fileAccept}/);
@@ -77,7 +91,7 @@ describe("mobile upload policy", () => {
   });
 
   it("falls back to local PDF extraction when phone uploads time out", () => {
-    assert.match(uploadPage, /import \{ extractPdfInBrowser \} from "@\/lib\/pdf\/browser-pdf"/);
+    assert.match(uploadPage, /import \{ extractPdfInBrowser, isSparsePdfText \} from "@\/lib\/pdf\/browser-pdf"/);
     assert.match(uploadPage, /isPdfUploadFile\(uploadFile\)/);
     assert.match(uploadPage, /extractPdfAfterUploadFailure/);
     assert.doesNotMatch(uploadPage, /import\("@\/lib\/pdf\/browser-pdf"\)/);

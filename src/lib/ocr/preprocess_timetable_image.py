@@ -30,7 +30,7 @@ def save_ocr_target(image, path, scale=3):
 def table_box(image):
     gray = ImageOps.grayscale(image)
     arr = np.array(gray)
-    mask = arr < 190
+    mask = arr < 225
     if not mask.any():
         return (0, 0, image.width, image.height)
     ys, xs = np.where(mask)
@@ -112,6 +112,7 @@ def build_targets(input_path, output_dir):
     gray = ImageOps.grayscale(crop)
     arr = np.array(gray)
     dark = arr < 190
+    line_dark = arr < 225
     height, width = dark.shape
 
     targets = []
@@ -119,8 +120,8 @@ def build_targets(input_path, output_dir):
     save_ocr_target(crop, full_path, 3)
     targets.append({"kind": "full", "path": full_path})
 
-    vertical = groups(dark.sum(axis=0), height * 0.55)
-    horizontal = groups(dark.sum(axis=1), width * 0.55)
+    vertical = groups(line_dark.sum(axis=0), height * 0.55)
+    horizontal = groups(line_dark.sum(axis=1), width * 0.55)
     x_lines = [item[2] for item in vertical]
     row_lines = [item[2] for item in horizontal]
 
@@ -143,7 +144,7 @@ def build_targets(input_path, output_dir):
         if x1 <= x0:
             continue
         col_width = x1 - x0
-        counts = dark[:, x0:x1].sum(axis=1)
+        counts = line_dark[:, x0:x1].sum(axis=1)
         cell_lines = []
         for line in row_line_lookup:
             lo = max(0, line - 2)
