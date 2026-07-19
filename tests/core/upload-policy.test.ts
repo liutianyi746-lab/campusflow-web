@@ -128,6 +128,7 @@ describe("mobile upload policy", () => {
       assert.doesNotMatch(browserSource, /\.at\(/);
       assert.doesNotMatch(browserSource, /\.toSorted\(/);
       assert.doesNotMatch(browserSource, /\.findLast\(/);
+      assert.doesNotMatch(browserSource, /\.matchAll\(/);
       assert.doesNotMatch(browserSource, /\.\.\.new Uint8Array/);
       assert.doesNotMatch(browserSource, /\.\.\.new Set/);
     }
@@ -153,4 +154,5 @@ describe("mobile upload policy", () => {
   it("does not require String.matchAll in the mobile local parsing fallback", () => {
     assert.doesNotMatch(localRecognizer, /\.matchAll\(/);
   });
+
 });
