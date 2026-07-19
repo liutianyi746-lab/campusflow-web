@@ -153,6 +153,7 @@ describe("mobile upload policy", () => {
 
   it("does not require String.matchAll in the mobile local parsing fallback", () => {
     assert.doesNotMatch(localRecognizer, /\.matchAll\(/);
+    assert.doesNotMatch(localRecognizer, /\(\?</, "older Safari cannot even parse lookbehind syntax");
   });
 
 });

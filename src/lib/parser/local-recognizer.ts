@@ -117,7 +117,7 @@ function normalizeExamOcrText(text: string): string {
     .replace(/[QO]300/g, "(13:00")
     .replace(/I300/g, "(13:00")
     .replace(/2026[^\d]{0,3}\d{0,2}(\d{2})(\d{2})[H日]?/g, "2026年$1月$2日")
-    .replace(/(?<!\d)(0?[1-9]|1[0-2])\s*(\d{2})\s*[H日]?\s*(?=\()/g, "$1月$2日")
+    .replace(/(^|[^\d])(0?[1-9]|1[0-2])\s*(\d{2})\s*[H日]?\s*(?=\()/g, "$1$2月$3日")
     .replace(/(?=(?:20\d{2}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日?\s*\(?\s*\d{1,2}\s*:\s*\d{2})/g, "\n");
 }
 
@@ -394,7 +394,7 @@ function courseNameFrom(line: string, teacher?: string, location?: string): stri
   return name
     .replace(/[、，,。]/g, " ")
     .replace(/\s+/g, " ")
-    .replace(/(?<=[\u4e00-\u9fa5]):(?=[\u4e00-\u9fa5])/g, "：")
+    .replace(/([\u4e00-\u9fa5]):(?=[\u4e00-\u9fa5])/g, "$1：")
     .trim();
 }
 
