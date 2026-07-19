@@ -49,6 +49,18 @@ function displayClean(value: string): string {
   return clean(value).replace(/▲/g, "").trim();
 }
 
+function collectMatches(value: string, pattern: RegExp): RegExpExecArray[] {
+  const matches: RegExpExecArray[] = [];
+  pattern.lastIndex = 0;
+  let match = pattern.exec(value);
+  while (match) {
+    matches.push(match);
+    match = pattern.exec(value);
+  }
+  pattern.lastIndex = 0;
+  return matches;
+}
+
 function decodeUtf16Be(bytes: number[]): string {
   let result = "";
   for (let index = 0; index + 1 < bytes.length; index += 2) {
@@ -213,7 +225,7 @@ function parseToUnicodeMapFromStream(stream: Uint8Array): Map<number, string> {
 
   const bfCharBlocks = source.match(/beginbfchar[\s\S]*?endbfchar/g) ?? [];
   for (const block of bfCharBlocks) {
-    const matches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
+    const matches = collectMatches(block, /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
     for (const match of matches) {
       map.set(Number.parseInt(match[1], 16), decodeUtf16Hex(match[2]));
     }
@@ -221,7 +233,7 @@ function parseToUnicodeMapFromStream(stream: Uint8Array): Map<number, string> {
 
   const bfRangeBlocks = source.match(/beginbfrange[\s\S]*?endbfrange/g) ?? [];
   for (const block of bfRangeBlocks) {
-    const arrayMatches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/g);
+    const arrayMatches = collectMatches(block, /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[([^\]]+)\]/g);
     for (const match of arrayMatches) {
       const start = Number.parseInt(match[1], 16);
       const values = match[3].match(/<([0-9A-Fa-f]+)>/g) ?? [];
@@ -231,7 +243,7 @@ function parseToUnicodeMapFromStream(stream: Uint8Array): Map<number, string> {
       }
     }
 
-    const rangeMatches = block.matchAll(/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
+    const rangeMatches = collectMatches(block, /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g);
     for (const match of rangeMatches) {
       const start = Number.parseInt(match[1], 16);
       const end = Number.parseInt(match[2], 16);
@@ -269,7 +281,7 @@ function extractPositionedTextFromStream(stream: Uint8Array, unicodeMap = new Ma
     `${numberPattern}\\s+${numberPattern}\\s+${numberPattern}\\s+${numberPattern}\\s+(${numberPattern})\\s+(${numberPattern})\\s+Tm`,
     "g",
   );
-  const matches = [...source.matchAll(matrixPattern)];
+  const matches = collectMatches(source, matrixPattern);
   const items: PositionedText[] = [];
 
   for (let index = 0; index < matches.length; index += 1) {
