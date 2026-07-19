@@ -10,6 +10,7 @@ const preprocessScript = readFileSync("src/lib/ocr/preprocess_timetable_image.py
 const browserOcr = readFileSync("src/lib/ocr/browser-ocr.ts", "utf8");
 const browserPdf = readFileSync("src/lib/pdf/browser-pdf.ts", "utf8");
 const mobilePolyfills = readFileSync("src/lib/browser/mobile-polyfills.ts", "utf8");
+const localRecognizer = readFileSync("src/lib/parser/local-recognizer.ts", "utf8");
 
 describe("mobile upload policy", () => {
   it("renders image-only PDF pages and runs timetable OCR when extracted text is sparse", () => {
@@ -147,5 +148,9 @@ describe("mobile upload policy", () => {
     assert.match(buildStaticScript, /injectMobilePolyfills/);
     assert.match(buildStaticScript, /campusflow-mobile-polyfills/);
     assert.match(buildStaticScript, /html\.replace\("<head>"/);
+  });
+
+  it("does not require String.matchAll in the mobile local parsing fallback", () => {
+    assert.doesNotMatch(localRecognizer, /\.matchAll\(/);
   });
 });
