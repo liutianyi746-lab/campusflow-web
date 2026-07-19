@@ -59,6 +59,18 @@ function addDays(date: Date, days: number): Date {
   return next;
 }
 
+function collectMatches(input: string, pattern: RegExp): RegExpExecArray[] {
+  const matches: RegExpExecArray[] = [];
+  pattern.lastIndex = 0;
+  let match = pattern.exec(input);
+  while (match) {
+    matches.push(match);
+    match = pattern.exec(input);
+  }
+  pattern.lastIndex = 0;
+  return matches;
+}
+
 function nextWeekday(base: Date, weekday: number, nextWeekOnly: boolean): Date {
   const current = base.getUTCDay() || 7;
   const offset = nextWeekOnly
@@ -128,7 +140,7 @@ function validDateParts(year: string, month: string, day: string): string | unde
 
 function dateFromInput(rawInput: string): string | undefined {
   const input = normalizeInput(rawInput);
-  const iso = [...input.matchAll(/(20\d{2})\D{1,6}(\d{1,2})\D{1,6}(\d{1,2})/g)];
+  const iso = collectMatches(input, /(20\d{2})\D{1,6}(\d{1,2})\D{1,6}(\d{1,2})/g);
   for (const match of iso) {
     const date = validDateParts(match[1], match[2], match[3]);
     if (date) return date;
@@ -317,7 +329,7 @@ function weekdayFrom(input: string, fallback?: number): number | undefined {
 }
 
 function parseWeekRule(input: string): { weekStart: number; weekEnd: number; weekType: "EVERY_WEEK" | "ODD_WEEK" | "EVEN_WEEK" | "SPECIFIC_WEEKS"; specificWeeks?: number[] } {
-  const specificWeeks = [...input.matchAll(/第?\s*(\d{1,2})\s*周/g)].map((match) => Number(match[1]));
+  const specificWeeks = collectMatches(input, /第?\s*(\d{1,2})\s*周/g).map((match) => Number(match[1]));
   if (specificWeeks.length > 1 && !/(\d{1,2})\s*[-~至到]\s*(\d{1,2})\s*周/.test(input)) {
     return {
       weekStart: Math.min(...specificWeeks),
