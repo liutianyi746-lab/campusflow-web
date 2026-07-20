@@ -16,7 +16,7 @@ type PdfJsModule = {
     promise: Promise<{
       numPages: number;
       getPage: (pageNumber: number) => Promise<{
-        getTextContent: () => Promise<{ items: TextItem[] }>;
+        streamTextContent: () => ReadableStream<{ items: TextItem[] }>;
         getViewport: (options: { scale: number }) => { width: number; height: number };
         render: (options: {
           canvasContext: CanvasRenderingContext2D;
@@ -149,6 +149,23 @@ export function isSparsePdfText(value: string): boolean {
 }
 
 type BrowserPdfPage = Awaited<ReturnType<Awaited<ReturnType<PdfJsModule["getDocument"]>["promise"]>["getPage"]>>;
+
+async function readPageTextContent(page: BrowserPdfPage): Promise<{ items: TextItem[] }> {
+  // PDF.js getTextContent() uses `for await...of`. Some Safari versions expose
+  // ReadableStream but not ReadableStream.prototype[Symbol.asyncIterator].
+  const stream = page.streamTextContent();
+  const reader = stream.getReader();
+  const items: TextItem[] = [];
+  while (true) {
+    const result = await reader.read();
+    if (result.done) break;
+    const chunkItems = result.value?.items ?? [];
+    for (let index = 0; index < chunkItems.length; index += 1) {
+      items.push(chunkItems[index]);
+    }
+  }
+  return { items };
+}
 
 async function renderPageToImageFile(page: BrowserPdfPage, pageNumber: number): Promise<File> {
   // 小字号中文课表在 2.4 倍渲染时笔画不足，浏览器 OCR 容易混淆形近字。
@@ -335,7 +352,7 @@ export async function extractPdfInBrowser(
       const page = await document.getPage(pageNumber);
       setStage("get-page-complete");
       setStage("get-text-content-start");
-      const content = await page.getTextContent();
+      const content = await readPageTextContent(page);
       setStage("get-text-content-complete");
       const items = content.items
         .map(itemToPositioned)

@@ -189,4 +189,10 @@ describe("mobile upload policy", () => {
     assert.match(browserPdf, /错误类型：\$\{errorName\}/);
   });
 
+  it("reads PDF.js text streams without requiring Safari ReadableStream async iteration", () => {
+    assert.match(browserPdf, /page\.streamTextContent\(\)/);
+    assert.match(browserPdf, /stream\.getReader\(\)/);
+    assert.doesNotMatch(browserPdf, /await page\.getTextContent\(\)/);
+  });
+
 });
