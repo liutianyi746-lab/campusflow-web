@@ -185,6 +185,8 @@ describe("mobile upload policy", () => {
       assert.match(browserPdf, new RegExp(field));
     }
     assert.match(browserPdf, /Safari 本地 PDF 解析失败/);
+    assert.match(browserPdf, /失败阶段：\$\{stage\}/);
+    assert.match(browserPdf, /错误类型：\$\{errorName\}/);
   });
 
 });

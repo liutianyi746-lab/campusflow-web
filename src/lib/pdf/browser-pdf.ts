@@ -425,7 +425,7 @@ export async function extractPdfInBrowser(
       processingTimeMs: Date.now() - startedAt,
       inputHash,
       source: "PDF",
-      error: "Safari 本地 PDF 解析失败，请重试网络识别、转换为图片上传，或在其他浏览器中打开。",
+      error: `Safari 本地 PDF 解析失败（失败阶段：${stage}；错误类型：${errorName}；PDF.js：${pdfjsVersion ?? "unknown"}；worker：${workerVersion ?? "unknown"}）。请重试网络识别、转换为图片上传，或在其他浏览器中打开。`,
       diagnostic,
     };
   }
