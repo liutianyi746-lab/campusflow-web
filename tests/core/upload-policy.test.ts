@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
@@ -154,6 +155,36 @@ describe("mobile upload policy", () => {
   it("does not require String.matchAll in the mobile local parsing fallback", () => {
     assert.doesNotMatch(localRecognizer, /\.matchAll\(/);
     assert.doesNotMatch(localRecognizer, /\(\?</, "older Safari cannot even parse lookbehind syntax");
+  });
+
+  it("ships the legacy PDF.js worker that matches the imported legacy main module", () => {
+    const deployedWorker = readFileSync("public/pdfjs/pdf.worker.mjs");
+    const legacyWorker = readFileSync("node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs");
+    const modernWorker = readFileSync("node_modules/pdfjs-dist/build/pdf.worker.mjs");
+    const hash = (value: Buffer) => createHash("sha256").update(value).digest("hex");
+
+    assert.equal(hash(deployedWorker), hash(legacyWorker));
+    assert.notEqual(hash(deployedWorker), hash(modernWorker));
+  });
+
+  it("records every Safari PDF.js boundary with actionable failure metadata", () => {
+    for (const stage of [
+      "dynamic-import-start",
+      "dynamic-import-complete",
+      "worker-configured",
+      "get-document-start",
+      "get-document-complete",
+      "get-page-start",
+      "get-page-complete",
+      "get-text-content-start",
+      "get-text-content-complete",
+    ]) {
+      assert.match(browserPdf, new RegExp(stage));
+    }
+    for (const field of ["errorName", "errorMessage", "errorStack", "pdfjsVersion", "workerVersion", "userAgent", "numPages"]) {
+      assert.match(browserPdf, new RegExp(field));
+    }
+    assert.match(browserPdf, /Safari 本地 PDF 解析失败/);
   });
 
 });

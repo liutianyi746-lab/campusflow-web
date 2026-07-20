@@ -5,11 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "next dev",
+    "prebuild": "node scripts/sync-pdfjs-worker.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test:core": "node --test tests/core/*.test.ts",
-    "build:static": "node scripts/build-static.mjs"
+    "prebuild:static": "node scripts/sync-pdfjs-worker.mjs",
+    "build:static": "node scripts/build-static.mjs",
+    "sync:pdfjs-worker": "node scripts/sync-pdfjs-worker.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -8,6 +8,7 @@ type TextItem = {
 };
 
 type PdfJsModule = {
+  version?: string;
   GlobalWorkerOptions: {
     workerSrc: string;
   };
@@ -25,6 +26,37 @@ type PdfJsModule = {
       }>;
     }>;
   };
+};
+
+type PdfStage =
+  | "initial"
+  | "dynamic-import-start"
+  | "dynamic-import-complete"
+  | "worker-configured"
+  | "get-document-start"
+  | "get-document-complete"
+  | "get-page-start"
+  | "get-page-complete"
+  | "get-text-content-start"
+  | "get-text-content-complete";
+
+type BrowserPdfDiagnostic = {
+  stage: PdfStage;
+  errorName?: string;
+  errorMessage?: string;
+  errorStack?: string;
+  pdfjsVersion?: string;
+  workerVersion?: string;
+  workerBuild?: string;
+  workerUrl?: string;
+  userAgent: string;
+  numPages?: number;
+};
+
+type WorkerMeta = {
+  version: string;
+  build: string;
+  flavor: "legacy";
 };
 
 type PositionedText = {
@@ -65,6 +97,35 @@ const IGNORE_TEXT = new Set([
 
 function assetBase(): string {
   return process.env.NEXT_PUBLIC_BASE_PATH ?? "";
+}
+
+function browserUserAgent(): string {
+  return typeof navigator === "undefined" ? "unavailable" : navigator.userAgent;
+}
+
+function logPdfStage(diagnostic: BrowserPdfDiagnostic): void {
+  console.info("[CampusFlow PDF]", diagnostic);
+}
+
+async function configurePdfWorker(pdfjs: PdfJsModule, base: string): Promise<WorkerMeta & { url: string }> {
+  const metadataUrl = `${base}/pdfjs/worker-meta.json?v=${encodeURIComponent(pdfjs.version ?? "unknown")}`;
+  const response = await fetch(metadataUrl, { cache: "no-store" });
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!response.ok || !contentType.toLowerCase().includes("application/json")) {
+    throw new Error(`PDF.js worker metadata invalid: HTTP ${response.status}, Content-Type ${contentType || "missing"}`);
+  }
+
+  const metadata = await response.json() as Partial<WorkerMeta>;
+  if (metadata.flavor !== "legacy" || !metadata.version || !metadata.build) {
+    throw new Error("PDF.js worker metadata is incomplete or uses the wrong build flavor");
+  }
+  if (pdfjs.version && metadata.version !== pdfjs.version) {
+    throw new Error(`PDF.js version mismatch: main ${pdfjs.version}, worker ${metadata.version}`);
+  }
+
+  const url = `${base}/pdfjs/pdf.worker.mjs?v=${encodeURIComponent(metadata.build)}`;
+  pdfjs.GlobalWorkerOptions.workerSrc = url;
+  return { ...metadata as WorkerMeta, url };
 }
 
 function clean(value: string): string {
@@ -193,9 +254,27 @@ function inferSemesterStart(text: string): string | undefined {
 export async function extractPdfInBrowser(
   file: File,
   onStatus?: (status: string) => void,
-): Promise<BrowserOcrResult & { semesterStart?: string }> {
+): Promise<BrowserOcrResult & { semesterStart?: string; diagnostic?: BrowserPdfDiagnostic }> {
   const startedAt = Date.now();
   const inputHash = await fileHash(file);
+  let stage: PdfStage = "initial";
+  let pdfjsVersion: string | undefined;
+  let workerVersion: string | undefined;
+  let workerBuild: string | undefined;
+  let workerUrl: string | undefined;
+  let numPages: number | undefined;
+  const setStage = (nextStage: PdfStage): void => {
+    stage = nextStage;
+    logPdfStage({
+      stage,
+      pdfjsVersion,
+      workerVersion,
+      workerBuild,
+      workerUrl,
+      userAgent: browserUserAgent(),
+      numPages,
+    });
+  };
 
   try {
     onStatus?.("正在本地读取 PDF 课表...");
@@ -226,24 +305,38 @@ export async function extractPdfInBrowser(
     }
 
     onStatus?.("\u6b63\u5728\u52a0\u8f7d PDF \u89e3\u6790\u5668...");
+    setStage("dynamic-import-start");
     const pdfjs = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as unknown as PdfJsModule;
+    pdfjsVersion = pdfjs.version;
+    setStage("dynamic-import-complete");
     const base = assetBase();
-    pdfjs.GlobalWorkerOptions.workerSrc = `${base}/pdfjs/pdf.worker.mjs`;
+    const worker = await configurePdfWorker(pdfjs, base);
+    workerVersion = worker.version;
+    workerBuild = worker.build;
+    workerUrl = worker.url;
+    setStage("worker-configured");
 
     onStatus?.("\u6b63\u5728\u8bfb\u53d6 PDF \u6587\u5b57...");
+    setStage("get-document-start");
     const document = await pdfjs.getDocument({
       data,
       cMapUrl: `${base}/pdfjs/cmaps/`,
       cMapPacked: true,
     }).promise;
+    numPages = document.numPages;
+    setStage("get-document-complete");
 
     const headers: WeekdayHeader[] = [];
     const entries: CourseEntry[] = [];
     const fallbackText: string[] = [];
 
     for (let pageNumber = 1; pageNumber <= document.numPages; pageNumber += 1) {
+      setStage("get-page-start");
       const page = await document.getPage(pageNumber);
+      setStage("get-page-complete");
+      setStage("get-text-content-start");
       const content = await page.getTextContent();
+      setStage("get-text-content-complete");
       const items = content.items
         .map(itemToPositioned)
         .filter((item): item is PositionedText => Boolean(item));
@@ -279,7 +372,9 @@ export async function extractPdfInBrowser(
       const renderedOcr: string[] = [];
       let confidence = 0;
       for (let pageNumber = 1; pageNumber <= Math.min(document.numPages, 3); pageNumber += 1) {
+        setStage("get-page-start");
         const page = await document.getPage(pageNumber);
+        setStage("get-page-complete");
         const imageFile = await renderPageToImageFile(page, pageNumber);
         const recognized = await recognizeImageInBrowser(imageFile, onStatus);
         if (!recognized.success || !recognized.ocrText.trim()) continue;
@@ -307,6 +402,22 @@ export async function extractPdfInBrowser(
       error: ocrText ? undefined : "PDF \u6ca1\u6709\u63d0\u53d6\u5230\u6587\u5b57\uff0c\u8bf7\u786e\u8ba4\u6587\u4ef6\u4e0d\u662f\u7eaf\u626b\u63cf\u56fe\u7247\u3002",
     };
   } catch (error) {
+    const errorName = error instanceof Error ? error.name : typeof error;
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    const errorStack = error instanceof Error ? error.stack : undefined;
+    const diagnostic: BrowserPdfDiagnostic = {
+      stage,
+      errorName,
+      errorMessage,
+      errorStack,
+      pdfjsVersion,
+      workerVersion,
+      workerBuild,
+      workerUrl,
+      userAgent: browserUserAgent(),
+      numPages,
+    };
+    console.error("[CampusFlow PDF failure]", diagnostic);
     return {
       success: false,
       ocrText: "",
@@ -314,7 +425,8 @@ export async function extractPdfInBrowser(
       processingTimeMs: Date.now() - startedAt,
       inputHash,
       source: "PDF",
-      error: String(error),
+      error: "Safari 本地 PDF 解析失败，请重试网络识别、转换为图片上传，或在其他浏览器中打开。",
+      diagnostic,
     };
   }
 }
