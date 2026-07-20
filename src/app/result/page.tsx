@@ -37,7 +37,7 @@ export default function ResultPage() {
   const typeCount = new Set(events.map((event) => event.type)).size;
 
   return (
-    <div className="mx-auto max-w-5xl">
+    <div className="workflow-page mx-auto max-w-5xl">
       <StepIndicator current="result" />
       <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
         <div>
@@ -46,22 +46,22 @@ export default function ResultPage() {
           <p className="mt-3 text-stone-600">共生成 {events.length} 个事件，覆盖 {typeCount} 类校园信息。</p>
         </div>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 shadow-sm">
+          <div className="metric-card rounded-xl border border-emerald-200/10 bg-emerald-950/40 px-4 py-3">
             <p className="text-stone-500">平均置信度</p>
             <p className="mt-1 text-2xl font-black text-emerald-900">{Math.round(averageConfidence * 100)}%</p>
           </div>
-          <div className="rounded-lg border border-amber-100 bg-white px-4 py-3 shadow-sm">
+          <div className="metric-card rounded-xl border border-amber-200/10 bg-emerald-950/40 px-4 py-3">
             <p className="text-stone-500">需核对</p>
             <p className="mt-1 text-2xl font-black text-amber-700">{reviewCount}</p>
           </div>
-          <div className="rounded-lg border border-sky-100 bg-white px-4 py-3 shadow-sm">
+          <div className="metric-card rounded-xl border border-cyan-200/10 bg-emerald-950/40 px-4 py-3">
             <p className="text-stone-500">事件类型</p>
             <p className="mt-1 text-2xl font-black text-sky-700">{typeCount}</p>
           </div>
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
+      <div className="result-table glass-panel overflow-hidden rounded-2xl">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[920px] text-sm">
             <thead className="bg-emerald-950 text-left text-white">

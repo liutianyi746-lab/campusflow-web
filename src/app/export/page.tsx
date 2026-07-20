@@ -22,10 +22,11 @@ export default function ExportPage() {
   const router = useRouter();
 
   return (
-    <div className="mx-auto max-w-4xl">
+    <div className="workflow-page mx-auto max-w-4xl">
       <StepIndicator current="export" />
-      <section className="rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto grid size-20 place-items-center rounded-2xl bg-lime-200 text-4xl font-black text-emerald-950">
+      <section className="export-success glass-panel relative overflow-hidden rounded-2xl p-8 text-center">
+        <div className="absolute left-1/2 top-0 -z-0 size-72 -translate-x-1/2 -translate-y-1/2 rounded-full bg-emerald-300/15 blur-3xl" aria-hidden="true" />
+        <div className="relative mx-auto grid size-20 place-items-center rounded-2xl bg-emerald-200 text-2xl font-black text-emerald-950 shadow-[0_0_40px_rgba(52,211,153,.28)]">
           ICS
         </div>
         <h1 className="mt-6 text-3xl font-black text-emerald-950">校园事件 ICS 已生成</h1>
@@ -36,7 +37,7 @@ export default function ExportPage() {
 
       <section className="mt-8 grid gap-4 md:grid-cols-3">
         {CALENDARS.map((calendar) => (
-          <article key={calendar.name} className="rounded-lg border border-emerald-100 bg-white p-5 shadow-sm">
+          <article key={calendar.name} className="calendar-card glass-panel shine-card rounded-xl p-5">
             <h2 className="font-bold text-emerald-950">{calendar.name}</h2>
             <p className="mt-3 text-sm leading-6 text-stone-600">{calendar.step}</p>
           </article>
