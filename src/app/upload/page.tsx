@@ -471,7 +471,7 @@ export default function UploadPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="workflow-page mx-auto max-w-6xl">
       <StepIndicator current="upload" />
       <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
@@ -487,13 +487,14 @@ export default function UploadPage() {
         </button>
       </div>
 
-      <section className="mb-5 rounded-xl border border-emerald-100 bg-white p-2 shadow-sm">
+      <section className="glass-panel mb-5 rounded-xl p-2">
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
           {SOURCE_PRESETS.map((preset) => (
             <button
               key={preset.id}
               onClick={() => choosePreset(preset.id)}
               className={[
+                "source-preset",
                 "min-h-20 rounded-lg px-3 py-3 text-left transition sm:px-4",
                 selectedPresetId === preset.id ? "bg-emerald-900 text-white" : "text-stone-700 hover:bg-stone-50",
               ].join(" ")}
@@ -522,6 +523,7 @@ export default function UploadPage() {
               if (file) void handleFile(file);
             }}
             className={[
+              "upload-zone glass-panel",
               "rounded-xl border-2 border-dashed bg-white p-6 shadow-sm transition",
               dragging ? "border-emerald-500 bg-emerald-50" : "border-emerald-200 hover:border-emerald-400",
             ].join(" ")}
@@ -566,7 +568,7 @@ export default function UploadPage() {
           </section>
 
           {(acceptsText || isScheduleMode) && !loading ? (
-            <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+            <section className="glass-panel rounded-xl p-5">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h2 className="font-bold text-emerald-950">{isScheduleMode ? "文本识别作息" : "文本输入"}</h2>
@@ -599,7 +601,7 @@ export default function UploadPage() {
           ) : null}
 
           {scheduleOpen && !isScheduleMode ? (
-            <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+            <section className="glass-panel rounded-xl p-5">
               <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
                 <div>
                   <h2 className="font-bold text-emerald-950">作息映射</h2>
@@ -631,7 +633,7 @@ export default function UploadPage() {
         </main>
 
         <aside className="space-y-5">
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <section className="glass-panel rounded-xl p-5">
             <h2 className="font-bold text-emerald-950">学期起始</h2>
             <p className="mt-1 text-sm text-stone-500">请填第一周周一，课程周次会按这个日期换算。</p>
             <label className="mt-4 block">
@@ -645,7 +647,7 @@ export default function UploadPage() {
             </label>
           </section>
 
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
+          <section className="glass-panel rounded-xl p-5">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="font-bold text-emerald-950">作息概览</h2>
