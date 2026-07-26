@@ -54,3 +54,7 @@ next-env.d.ts
 # local design exploration artifacts
 /.superpowers/
 /.worktrees/
+
+# python
+__pycache__/
+*.py[cod]
