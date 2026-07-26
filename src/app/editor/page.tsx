@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { StepIndicator } from "@/app/_components/step-indicator";
 import {
@@ -12,6 +12,9 @@ import {
   sourceLabel,
 } from "@/lib/ui/event-format";
 import { apiUrl } from "@/lib/http/api-client";
+import { cn } from "@/lib/utils/cn";
+import { Button, Chip, EmptyState, SectionCard } from "@/components/ui";
+import { Icon } from "@/components/ui/icon";
 import type { CampusEvent, CampusEventType, CourseFields, WeekType } from "@/lib/types/campus-event";
 import { useEventStore } from "@/stores/use-event-store";
 
@@ -87,6 +90,23 @@ function buildDraft(event: CampusEvent): EventDraft {
   };
 }
 
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <label className={cn("block", className)}>
+      <span className="field-label">{label}</span>
+      {children}
+    </label>
+  );
+}
+
 function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEditorProps) {
   const [draft, setDraft] = useState<EventDraft>(() => buildDraft(event));
 
@@ -139,32 +159,35 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
   };
 
   return (
-    <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-      <div className="flex flex-col justify-between gap-3 border-b border-stone-100 pb-4 sm:flex-row sm:items-start">
-        <div>
-          <h2 className="font-bold text-emerald-950">编辑事件</h2>
-          <p className="mt-1 text-sm text-stone-500">当前来源：{sourceLabel(event.source)}</p>
+    <section className="card p-5 sm:p-6">
+      <div className="flex flex-col justify-between gap-3 border-b border-line pb-4 sm:flex-row sm:items-start">
+        <div className="flex gap-3">
+          <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary-soft-fg">
+            <Icon name="sliders" size={18} />
+          </span>
+          <div>
+            <h2 className="text-base font-bold text-fg">编辑事件</h2>
+            <p className="mt-1 text-sm text-muted">当前来源：{sourceLabel(event.source)}</p>
+          </div>
         </div>
-        <span className="w-fit rounded-full bg-stone-50 px-3 py-1 text-xs font-semibold text-stone-600 ring-1 ring-stone-200">
+        <Chip tone="chip-neutral" dot>
           置信度 {Math.round(event.confidence * 100)}%
-        </span>
+        </Chip>
       </div>
 
       <div className="mt-5 grid gap-4 md:grid-cols-2">
-        <label className="md:col-span-2">
-          <span className="text-sm font-semibold text-stone-700">标题 / 课程</span>
+        <Field label="标题 / 课程" className="md:col-span-2">
           <input
             value={draft.title}
             onChange={(inputEvent) => setDraftField("title", inputEvent.target.value)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="input"
           />
-        </label>
-        <label>
-          <span className="text-sm font-semibold text-stone-700">类型</span>
+        </Field>
+        <Field label="类型">
           <select
             value={draft.type}
             onChange={(inputEvent) => setDraftField("type", inputEvent.target.value as CampusEventType)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="select"
           >
             {EVENT_TYPES.map((type) => (
               <option key={type} value={type}>
@@ -172,100 +195,93 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
               </option>
             ))}
           </select>
-        </label>
-        <label>
-          <span className="text-sm font-semibold text-stone-700">地点</span>
+        </Field>
+        <Field label="地点">
           <input
             value={draft.location}
             onChange={(inputEvent) => setDraftField("location", inputEvent.target.value)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="input"
             placeholder="例如：教学楼 A301"
           />
-        </label>
+        </Field>
         {draft.type === "EXAM" ? (
-          <label>
-            <span className="text-sm font-semibold text-stone-700">座位号</span>
+          <Field label="座位号">
             <input
               value={draft.seatNumber}
               onChange={(inputEvent) => setDraftField("seatNumber", inputEvent.target.value)}
-              className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+              className="input"
               placeholder="例如：57"
             />
-          </label>
+          </Field>
         ) : null}
-        <label>
-          <span className="text-sm font-semibold text-stone-700">开始时间</span>
+        <Field label="开始时间">
           <input
             type="datetime-local"
             value={draft.startTime}
             onChange={(inputEvent) => setDraftField("startTime", inputEvent.target.value)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="input"
           />
-        </label>
-        <label>
-          <span className="text-sm font-semibold text-stone-700">结束时间</span>
+        </Field>
+        <Field label="结束时间">
           <input
             type="datetime-local"
             value={draft.endTime}
             onChange={(inputEvent) => setDraftField("endTime", inputEvent.target.value)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="input"
           />
-        </label>
-        <label>
-          <span className="text-sm font-semibold text-stone-700">提醒提前分钟</span>
+        </Field>
+        <Field label="提醒提前分钟">
           <input
             type="number"
             min={0}
             value={draft.reminderMinutes}
             onChange={(inputEvent) => setDraftField("reminderMinutes", inputEvent.target.value)}
-            className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="input"
           />
-        </label>
-        <label className="md:col-span-2">
-          <span className="text-sm font-semibold text-stone-700">备注</span>
+        </Field>
+        <Field label="备注" className="md:col-span-2">
           <textarea
             value={draft.description}
             onChange={(inputEvent) => setDraftField("description", inputEvent.target.value)}
             rows={3}
-            className="mt-2 w-full resize-none rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+            className="textarea"
           />
-        </label>
+        </Field>
       </div>
 
       {draft.type === "COURSE" || event.course ? (
-        <div className="mt-5 border-t border-stone-100 pt-5">
-          <h3 className="font-bold text-emerald-950">课程映射</h3>
-          <div className="mt-4 grid gap-4 md:grid-cols-4">
-            <label className="md:col-span-2">
-              <span className="text-sm font-semibold text-stone-700">课程名</span>
+        <div className="mt-6 border-t border-line pt-5">
+          <h3 className="flex items-center gap-2 font-bold text-fg">
+            <Icon name="calendar" size={16} className="text-primary" />
+            课程映射
+          </h3>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Field label="课程名" className="sm:col-span-2">
               <input
                 value={draft.courseName}
                 onChange={(inputEvent) => setDraftField("courseName", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">教师</span>
+            </Field>
+            <Field label="教师">
               <input
                 value={draft.teacher}
                 onChange={(inputEvent) => setDraftField("teacher", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">教室</span>
+            </Field>
+            <Field label="教室">
               <input
                 value={draft.classroom}
                 onChange={(inputEvent) => setDraftField("classroom", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">星期</span>
+            </Field>
+            <Field label="星期">
               <select
                 value={draft.dayOfWeek}
                 onChange={(inputEvent) => setDraftField("dayOfWeek", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="select"
               >
                 {["周一", "周二", "周三", "周四", "周五", "周六", "周日"].map((label, index) => (
                   <option key={label} value={index + 1}>
@@ -273,33 +289,30 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
                   </option>
                 ))}
               </select>
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">开始节次</span>
+            </Field>
+            <Field label="开始节次">
               <input
                 type="number"
                 min={1}
                 value={draft.periodStart}
                 onChange={(inputEvent) => setDraftField("periodStart", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">结束节次</span>
+            </Field>
+            <Field label="结束节次">
               <input
                 type="number"
                 min={1}
                 value={draft.periodEnd}
                 onChange={(inputEvent) => setDraftField("periodEnd", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">周次规则</span>
+            </Field>
+            <Field label="周次规则">
               <select
                 value={draft.weekType}
                 onChange={(inputEvent) => setDraftField("weekType", inputEvent.target.value as WeekType)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="select"
               >
                 {WEEK_TYPES.map((type) => (
                   <option key={type.value} value={type.value}>
@@ -307,44 +320,36 @@ function EventEditor({ event, updateEvent, removeEvent, setMessage }: EventEdito
                   </option>
                 ))}
               </select>
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">起始周</span>
+            </Field>
+            <Field label="起始周">
               <input
                 type="number"
                 min={1}
                 value={draft.weekStart}
                 onChange={(inputEvent) => setDraftField("weekStart", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
-            <label>
-              <span className="text-sm font-semibold text-stone-700">结束周</span>
+            </Field>
+            <Field label="结束周">
               <input
                 type="number"
                 min={1}
                 value={draft.weekEnd}
                 onChange={(inputEvent) => setDraftField("weekEnd", inputEvent.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
-            </label>
+            </Field>
           </div>
         </div>
       ) : null}
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
-        <button
-          onClick={saveDraft}
-          className="rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800"
-        >
+      <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <Button variant="primary" icon="check" onClick={saveDraft}>
           保存修改
-        </button>
-        <button
-          onClick={deleteCurrent}
-          className="rounded-lg border border-rose-200 px-5 py-3 font-semibold text-rose-700 hover:bg-rose-50"
-        >
+        </Button>
+        <Button variant="danger" icon="trash" onClick={deleteCurrent}>
           删除当前事件
-        </button>
+        </Button>
       </div>
     </section>
   );
@@ -443,91 +448,100 @@ export default function EditorPage() {
 
   if (!events.length) {
     return (
-      <div className="mx-auto max-w-2xl rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-black text-emerald-950">编辑台还没有事件</h1>
-        <p className="mt-3 text-stone-600">上传校园信息后，可以在这里校对地点、时间和课程字段。</p>
-        <button
-          onClick={() => router.push("/upload")}
-          className="mt-6 rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800"
-        >
-          去生成事件
-        </button>
-      </div>
+      <EmptyState
+        icon="sliders"
+        title="编辑台还没有事件"
+        description="上传校园信息后，可以在这里校对地点、时间和课程字段。"
+        action={
+          <Button variant="primary" icon="upload" onClick={() => router.push("/upload")}>
+            去生成事件
+          </Button>
+        }
+      />
     );
   }
 
   return (
     <div className="mx-auto max-w-6xl">
       <StepIndicator current="editor" />
-      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+
+      <header className="mb-7 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
         <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Step 3</p>
-          <h1 className="mt-2 text-3xl font-black text-emerald-950">核对识别结果</h1>
-          <p className="mt-3 max-w-2xl text-stone-600">逐条修正识别错的课程、地点和时间，再导出 ICS。</p>
+          <p className="eyebrow">Step 3</p>
+          <h1 className="mt-2 text-3xl font-extrabold text-fg">核对识别结果</h1>
+          <p className="mt-2.5 max-w-2xl text-muted">
+            逐条修正识别错的课程、地点和时间，再导出 ICS。
+          </p>
         </div>
-        <div className="grid gap-3 sm:grid-cols-[180px_auto] sm:items-end">
-          <label>
-            <span className="text-sm font-semibold text-stone-700">第一周周一</span>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <label className="sm:w-44">
+            <span className="field-label">第一周周一</span>
             <input
               type="date"
               value={semesterStart}
               onChange={(event) => setSemesterStart(event.target.value)}
-              className="mt-2 w-full rounded-lg border border-stone-200 bg-white px-3 py-2 outline-emerald-700"
+              className="input"
             />
           </label>
-          <button
-            onClick={exportIcs}
-            className="rounded-lg bg-emerald-900 px-5 py-3 font-black text-lime-200 transition hover:bg-emerald-800"
-          >
+          <Button variant="primary" icon="download" onClick={exportIcs}>
             导出 ICS（{selectedIds.size}）
-          </button>
+          </Button>
         </div>
-      </div>
+      </header>
 
-      <div className="grid gap-5 lg:grid-cols-[360px_1fr]">
-        <section className="overflow-hidden rounded-xl border border-emerald-100 bg-white shadow-sm">
-          <div className="flex items-center justify-between border-b border-emerald-100 px-4 py-3">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,360px)_minmax(0,1fr)]">
+        {/* 事件列表 */}
+        <section className="card overflow-hidden lg:sticky lg:top-24 lg:self-start">
+          <div className="flex items-center justify-between gap-2 border-b border-line px-4 py-3">
             <div>
-              <h2 className="font-bold text-emerald-950">事件列表</h2>
-              <p className="mt-1 text-xs text-stone-500">
+              <h2 className="font-bold text-fg">事件列表</h2>
+              <p className="tabular mt-0.5 text-xs text-subtle">
                 已选择 {selectedIds.size} / {events.length}
               </p>
             </div>
-            <button onClick={selectAll} className="rounded-md px-3 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50">
+            <Button size="sm" variant="ghost" icon="check" onClick={selectAll}>
               全选
-            </button>
+            </Button>
           </div>
-          <div className="max-h-[620px] overflow-auto">
+          {/* 手机上不做内层滚动，嵌套滚动在 iOS 上很难操作 */}
+          <div className="scroll-area max-h-none lg:max-h-[560px]">
             {events.map((event) => {
               const active = event.id === selectedEvent?.id;
               return (
                 <article
                   key={event.id}
                   onClick={() => setEditingId(event.id)}
-                  className={[
-                    "grid cursor-pointer grid-cols-[22px_1fr] gap-3 border-b border-stone-100 px-4 py-3 transition last:border-b-0",
-                    active ? "bg-emerald-50" : "bg-white hover:bg-stone-50",
-                  ].join(" ")}
+                  className={cn(
+                    "relative grid cursor-pointer grid-cols-[22px_minmax(0,1fr)] gap-3 border-b border-line px-4 py-3 transition-colors last:border-b-0",
+                    active ? "bg-primary-soft/60" : "hover:bg-surface-2",
+                  )}
                 >
+                  {active ? (
+                    <span
+                      aria-hidden="true"
+                      className="absolute inset-y-0 left-0 w-[3px] rounded-r bg-primary"
+                    />
+                  ) : null}
                   <input
                     aria-label={`选择 ${event.title}`}
                     type="checkbox"
                     checked={selectedIds.has(event.id)}
                     onClick={(clickEvent) => clickEvent.stopPropagation()}
                     onChange={() => toggleSelect(event.id)}
-                    className="mt-1 size-4 accent-emerald-700"
+                    className="checkbox mt-1"
                   />
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h3 className="truncate font-semibold text-emerald-950">{event.title}</h3>
-                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ring-1 ${eventTypeTone(event.type)}`}>
+                      <h3 className="truncate font-semibold text-fg">{event.title}</h3>
+                      <Chip tone={eventTypeTone(event.type)} className="shrink-0">
                         {eventTypeLabel(event.type)}
-                      </span>
+                      </Chip>
                     </div>
-                    <p className="mt-1 truncate text-sm text-stone-600">
-                      {formatEventTime(event)} · {eventLocation(event)}{event.type === "EXAM" && event.seatNumber ? ` · 座位 ${event.seatNumber}` : ""}
+                    <p className="tabular mt-1 truncate text-sm text-muted">
+                      {formatEventTime(event)} · {eventLocation(event)}
+                      {event.type === "EXAM" && event.seatNumber ? ` · 座位 ${event.seatNumber}` : ""}
                     </p>
-                    <p className="mt-1 truncate text-xs text-stone-400">
+                    <p className="mt-1 truncate text-xs text-subtle">
                       {formatEventRule(event)} · {sourceLabel(event.source)}
                     </p>
                   </div>
@@ -537,57 +551,59 @@ export default function EditorPage() {
           </div>
         </section>
 
-        <main className="space-y-5">
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
-              <div>
-                <h2 className="font-bold text-emerald-950">节假日停课</h2>
-                <p className="mt-1 text-sm text-stone-600">
-                  导出 ICS 时，课程落在这些日期会自动跳过。默认包含 2026 年中国法定节假日，可补充学校校历停课日。
-                </p>
-              </div>
-              <button
+        <div className="space-y-5">
+          <SectionCard
+            icon="calendar"
+            title="节假日停课"
+            description="导出 ICS 时，课程落在这些日期会自动跳过。默认包含 2026 年中国法定节假日，可补充学校校历停课日。"
+            action={
+              <Button
+                size="sm"
+                icon="refresh"
                 onClick={() => {
                   resetNoClassDates();
                   setMessage("已恢复 2026 年默认节假日停课日期。");
                 }}
-                className="w-fit rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
               >
                 恢复默认
-              </button>
-            </div>
-            <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+              </Button>
+            }
+          >
+            <div className="flex flex-col gap-3 sm:flex-row">
               <input
                 type="date"
                 value={newNoClassDate}
                 onChange={(event) => setNewNoClassDate(event.target.value)}
-                className="rounded-lg border border-stone-200 bg-white px-3 py-2 outline-emerald-700"
+                className="input sm:w-52"
               />
-              <button
+              <Button
+                variant="primary"
+                icon="plus"
                 onClick={() => {
                   if (!newNoClassDate) return;
                   addNoClassDate(newNoClassDate);
                   setNewNoClassDate("");
                   setMessage("已添加停课日期，导出 ICS 时会跳过当天课程。");
                 }}
-                className="rounded-lg bg-emerald-700 px-5 py-2 font-semibold text-white hover:bg-emerald-800"
               >
                 添加停课日
-              </button>
+              </Button>
             </div>
-            <div className="mt-4 flex max-h-36 flex-wrap gap-2 overflow-auto">
+            <div className="scroll-area mt-4 flex max-h-36 flex-wrap gap-2">
               {noClassDates.map((date) => (
                 <button
                   key={date}
+                  type="button"
                   onClick={() => removeNoClassDate(date)}
-                  className="rounded-full border border-emerald-100 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-900 hover:border-rose-200 hover:bg-rose-50 hover:text-rose-700"
                   title="点击移除"
+                  className="tabular group inline-flex items-center gap-1.5 rounded-full border border-line bg-surface-2 px-2.5 py-1 text-xs font-semibold text-muted transition-colors hover:border-danger/45 hover:bg-danger-soft hover:text-danger-soft-fg"
                 >
                   {date}
+                  <Icon name="close" size={12} className="opacity-50 group-hover:opacity-100" />
                 </button>
               ))}
             </div>
-          </section>
+          </SectionCard>
 
           {selectedEvent ? (
             <EventEditor
@@ -599,31 +615,31 @@ export default function EditorPage() {
             />
           ) : null}
 
-          <section className="grid gap-4 rounded-xl border border-emerald-100 bg-white p-5 shadow-sm lg:grid-cols-[1fr_auto] lg:items-end">
-            <label>
-              <span className="font-bold text-emerald-950">补充一条事件</span>
+          <SectionCard
+            icon="plus"
+            title="补充一条事件"
+            description="用一句自然语言描述，会直接追加到事件列表。"
+          >
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
               <textarea
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 rows={3}
-                className="mt-3 w-full resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm outline-emerald-700"
+                className="textarea"
                 placeholder="例如：6月20日 23:59 前提交实验报告"
               />
-            </label>
-            <button
-              onClick={addFromText}
-              disabled={adding}
-              className="rounded-lg border border-emerald-200 px-5 py-3 font-semibold text-emerald-800 hover:bg-emerald-50 disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              {adding ? "生成中..." : "添加事件"}
-            </button>
-          </section>
-        </main>
+              <Button icon="sparkles" onClick={addFromText} disabled={adding}>
+                {adding ? "生成中..." : "添加事件"}
+              </Button>
+            </div>
+          </SectionCard>
+        </div>
       </div>
 
       {message ? (
-        <div className="mt-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {message}
+        <div role="status" className="alert alert-info mt-6 animate-rise">
+          <Icon name="check-circle" size={18} className="mt-0.5 shrink-0" />
+          <span>{message}</span>
         </div>
       ) : null}
     </div>

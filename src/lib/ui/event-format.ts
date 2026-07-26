@@ -28,20 +28,21 @@ export function sourceLabel(source: EventSource): string {
   return SOURCE_LABELS[source] ?? source;
 }
 
+/** 返回 globals.css 里定义的 chip 色调类名，浅色/深色由 CSS 变量自动处理。 */
 export function eventTypeTone(type: CampusEventType): string {
   switch (type) {
     case "COURSE":
-      return "bg-sky-50 text-sky-700 ring-sky-200";
+      return "chip-sky";
     case "EXAM":
-      return "bg-rose-50 text-rose-700 ring-rose-200";
+      return "chip-rose";
     case "HOMEWORK":
-      return "bg-amber-50 text-amber-700 ring-amber-200";
+      return "chip-amber";
     case "MEETING":
-      return "bg-violet-50 text-violet-700 ring-violet-200";
+      return "chip-violet";
     case "ACTIVITY":
-      return "bg-lime-50 text-lime-700 ring-lime-200";
+      return "chip-lime";
     default:
-      return "bg-stone-50 text-stone-700 ring-stone-200";
+      return "chip-neutral";
   }
 }
 

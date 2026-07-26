@@ -31,8 +31,9 @@ export function confidenceLabel(confidence: number): string {
   return "低置信";
 }
 
+/** 返回 globals.css 里定义的 chip 色调类名，浅色/深色由 CSS 变量自动处理。 */
 export function confidenceTone(confidence: number): string {
-  if (confidence >= 0.85) return "bg-emerald-50 text-emerald-700 ring-emerald-200";
-  if (confidence >= 0.7) return "bg-amber-50 text-amber-700 ring-amber-200";
-  return "bg-rose-50 text-rose-700 ring-rose-200";
+  if (confidence >= 0.85) return "chip-emerald";
+  if (confidence >= 0.7) return "chip-amber";
+  return "chip-rose";
 }

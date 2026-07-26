@@ -10,6 +10,11 @@ import { apiUrl } from "@/lib/http/api-client";
 import { extractPdfInBrowser, isSparsePdfText } from "@/lib/pdf/browser-pdf";
 import { parseWithLocalFallback } from "@/lib/parser/network-parse-fallback";
 import { parseScheduleTemplateText } from "@/lib/schedule/schedule-template-parser";
+import { Button, SectionCard, Spinner } from "@/components/ui";
+import { ScheduleEditor } from "@/components/schedule/schedule-editor";
+import { DAY_PART_LABELS, groupPeriodsByDayPart, type ScheduleIssue } from "@/lib/schedule/schedule-validation";
+import { Icon, type IconName } from "@/components/ui/icon";
+import { cn } from "@/lib/utils/cn";
 import type { CampusEvent, EventSource, RecognitionIntent } from "@/lib/types/campus-event";
 
 const SUPPORTED_TYPES = new Set([
@@ -162,25 +167,16 @@ const SOURCE_PRESETS: Array<{
   description: string;
   intent: RecognitionIntent;
   source: EventSource;
+  icon: IconName;
 }> = [
-  { id: "image", label: "图片", description: "课表、作业、通知截图", intent: "AUTO", source: "IMAGE" },
-  { id: "pdf", label: "PDF", description: "课表、考试、教学计划", intent: "AUTO", source: "PDF" },
-  { id: "excel", label: "Excel", description: "教务系统导出表格", intent: "COURSE", source: "EXCEL" },
-  { id: "notice", label: "群截图", description: "微信或 QQ 通知", intent: "NOTICE", source: "IMAGE" },
-  { id: "text", label: "文本", description: "粘贴自然语言", intent: "NATURAL_LANGUAGE", source: "TEXT" },
-  { id: "schedule", label: "作息表", description: "截图、PDF 或文本", intent: "SCHEDULE", source: "IMAGE" },
+  { id: "image", label: "图片", description: "课表、作业、通知截图", intent: "AUTO", source: "IMAGE", icon: "image" },
+  { id: "pdf", label: "PDF", description: "课表、考试、教学计划", intent: "AUTO", source: "PDF", icon: "file-text" },
+  { id: "excel", label: "Excel", description: "教务系统导出表格", intent: "COURSE", source: "EXCEL", icon: "table" },
+  { id: "notice", label: "群截图", description: "微信或 QQ 通知", intent: "NOTICE", source: "IMAGE", icon: "message" },
+  { id: "text", label: "文本", description: "粘贴自然语言", intent: "NATURAL_LANGUAGE", source: "TEXT", icon: "type" },
+  { id: "schedule", label: "作息表", description: "截图、PDF 或文本", intent: "SCHEDULE", source: "IMAGE", icon: "clock" },
 ];
 
-const DEFAULT_SCHEDULE_TEXT = `第一节 08:00-08:45
-第二节 08:55-09:40
-第三节 10:10-10:55
-第四节 11:05-11:50
-第五节 14:00-14:45
-第六节 14:55-15:40
-第七节 16:10-16:55
-第八节 17:05-17:50
-第九节 19:00-19:45
-第十节 19:55-20:40`;
 
 const SAMPLE_EVENTS: CampusEvent[] = [
   {
@@ -250,9 +246,8 @@ export default function UploadPage() {
   const [selectedPresetId, setSelectedPresetId] = useState("image");
   const selectedPreset = SOURCE_PRESETS.find((preset) => preset.id === selectedPresetId) ?? SOURCE_PRESETS[0];
   const [textInput, setTextInput] = useState("下周五晚上七点开班会，地点线上会议");
-  const [scheduleText, setScheduleText] = useState(DEFAULT_SCHEDULE_TEXT);
   const [scheduleMessage, setScheduleMessage] = useState("当前使用通用大学作息模板。");
-  const [scheduleWarnings, setScheduleWarnings] = useState<string[]>([]);
+  const [scheduleIssues, setScheduleIssues] = useState<ScheduleIssue[]>([]);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -276,16 +271,21 @@ export default function UploadPage() {
   const applyScheduleText = useCallback(
     (value: string, name = "自定义学校作息表", source: EventSource = "MANUAL") => {
       const result = parseScheduleTemplateText(value, { name, source });
-      setScheduleWarnings(result.warnings);
+      setScheduleIssues(result.issues);
 
       if (!result.template.periods.length) {
-        setError("作息表没有识别到有效节次，请按“第一节 08:00-08:45”的格式输入。");
+        setError("作息表没有识别到有效节次。可以直接在下面逐节手动填，或按“第一节 08:00-08:45”的格式粘贴文本。");
+        setScheduleOpen(true);
         return false;
       }
 
       setError("");
       setScheduleTemplate(result.template);
-      setScheduleMessage(`已启用 ${result.template.periods.length} 个节次，课程会按这张作息表映射。`);
+
+      const skipped = result.stats.skippedLines
+        ? `，跳过 ${result.stats.skippedLines} 行表头或午休等非上课时段`
+        : "";
+      setScheduleMessage(`已识别 ${result.template.periods.length} 个节次${skipped}。`);
       return true;
     },
     [setScheduleTemplate],
@@ -451,13 +451,17 @@ export default function UploadPage() {
     [applyScheduleText, finishWithEvents, isScheduleMode, scheduleTemplate, selectedPreset.intent, selectedPreset.source, semesterStart, setImageUrl, setOcrResult, setSemesterStart],
   );
 
-
   const resetSchedule = () => {
     resetScheduleTemplate();
-    setScheduleText(DEFAULT_SCHEDULE_TEXT);
-    setScheduleWarnings([]);
+    setScheduleIssues([]);
     setScheduleMessage("已恢复通用大学作息模板。");
     setError("");
+  };
+
+  const updateScheduleTemplate = (next: typeof scheduleTemplate) => {
+    setScheduleTemplate(next);
+    setScheduleIssues([]);
+    setScheduleMessage(`当前共 ${next.periods.length} 个节次，课程会按这张作息表映射。`);
   };
 
   const useSample = () => {
@@ -473,42 +477,59 @@ export default function UploadPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <StepIndicator current="upload" />
-      <div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Step 1</p>
-          <h1 className="mt-2 text-3xl font-black text-emerald-950">生成校园时间事件</h1>
-          <p className="mt-3 max-w-2xl text-stone-600">选择一种来源，识别后进入校对页修正课程、地点和时间。</p>
-        </div>
-        <button
-          onClick={useSample}
-          className="w-fit rounded-lg border border-emerald-200 px-4 py-2 font-semibold text-emerald-800 transition hover:bg-emerald-50"
-        >
-          使用示例
-        </button>
-      </div>
 
-      <section className="mb-5 rounded-xl border border-emerald-100 bg-white p-2 shadow-sm">
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-          {SOURCE_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => choosePreset(preset.id)}
-              className={[
-                "min-h-20 rounded-lg px-3 py-3 text-left transition sm:px-4",
-                selectedPresetId === preset.id ? "bg-emerald-900 text-white" : "text-stone-700 hover:bg-stone-50",
-              ].join(" ")}
-            >
-              <span className="block text-sm font-bold">{preset.label}</span>
-              <span className={selectedPresetId === preset.id ? "mt-1 block text-xs text-emerald-100" : "mt-1 block text-xs text-stone-500"}>
-                {preset.description}
-              </span>
-            </button>
-          ))}
+      <header className="mb-7 flex flex-col justify-between gap-4 lg:flex-row lg:items-end">
+        <div>
+          <p className="eyebrow">Step 1</p>
+          <h1 className="mt-2 text-3xl font-extrabold text-fg">生成校园时间事件</h1>
+          <p className="mt-2.5 max-w-2xl text-muted">
+            选择一种来源，识别后进入校对页修正课程、地点和时间。
+          </p>
+        </div>
+        <Button onClick={useSample} icon="sparkles" className="w-fit">
+          使用示例数据
+        </Button>
+      </header>
+
+      {/* 来源选择 */}
+      <section className="mb-5" aria-label="选择来源类型">
+        <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+          {SOURCE_PRESETS.map((preset) => {
+            const active = selectedPresetId === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                onClick={() => choosePreset(preset.id)}
+                aria-pressed={active}
+                className={cn(
+                  "group flex min-h-[5.5rem] flex-col items-start gap-2 rounded-xl border p-3 text-left transition-all duration-200",
+                  active
+                    ? "border-primary bg-primary text-primary-fg shadow-[var(--shadow-primary)]"
+                    : "border-line bg-surface text-fg hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[var(--shadow-md)]",
+                )}
+              >
+                <span
+                  className={cn(
+                    "grid size-8 place-items-center rounded-lg transition-colors",
+                    active ? "bg-primary-fg/15 text-primary-fg" : "bg-primary-soft text-primary-soft-fg",
+                  )}
+                >
+                  <Icon name={preset.icon} size={17} />
+                </span>
+                <span className="text-sm font-bold">{preset.label}</span>
+                <span className={cn("text-xs leading-4", active ? "opacity-80" : "text-subtle")}>
+                  {preset.description}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      <div className="grid gap-5 lg:grid-cols-[1fr_320px]">
-        <main className="space-y-5">
+      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_330px]">
+        <div className="space-y-5">
+          {/* 拖拽 / 选择文件 */}
           <section
             onDragOver={(event) => {
               event.preventDefault();
@@ -521,184 +542,187 @@ export default function UploadPage() {
               const file = event.dataTransfer.files[0];
               if (file) void handleFile(file);
             }}
-            className={[
-              "rounded-xl border-2 border-dashed bg-white p-6 shadow-sm transition",
-              dragging ? "border-emerald-500 bg-emerald-50" : "border-emerald-200 hover:border-emerald-400",
-            ].join(" ")}
+            className={cn(
+              "rounded-2xl border-2 border-dashed p-6 transition-all duration-200",
+              dragging
+                ? "scale-[1.01] border-primary bg-primary-soft"
+                : "border-line-strong bg-surface hover:border-primary/50",
+            )}
           >
             {loading ? (
               <div className="flex min-h-64 flex-col items-center justify-center gap-5 text-center">
-                <div className="size-12 animate-spin rounded-full border-4 border-emerald-100 border-t-emerald-700" />
-                <p className="font-semibold text-emerald-900">{status}</p>
+                <Spinner size={44} />
+                <p className="font-semibold text-fg">{status}</p>
                 {preview ? (
                   <div
                     aria-label="上传预览"
-                    className="h-44 w-full max-w-sm rounded-lg border border-emerald-100 bg-cover bg-center shadow-sm"
+                    className="h-44 w-full max-w-sm rounded-xl border border-line bg-surface-2 bg-cover bg-center shadow-[var(--shadow-sm)]"
                     style={{ backgroundImage: `url(${preview})` }}
                   />
                 ) : null}
               </div>
             ) : (
-              <div className="grid min-h-64 gap-5 md:grid-cols-[1fr_auto] md:items-center">
+              <div className="grid min-h-64 place-items-center gap-6 py-4 text-center">
                 <div>
-                  <p className="text-sm font-semibold text-emerald-700">当前来源</p>
-                  <h2 className="mt-2 text-2xl font-black text-emerald-950">{selectedPreset.label}</h2>
-                  <p className="mt-2 text-stone-600">{selectedPreset.description}</p>
-                  <p className="mt-4 text-sm text-stone-500">支持图片、PDF、Excel 和文本；最大 25MB。</p>
-                </div>
-                <label className="block w-full md:w-80">
-                  <span className="mb-2 block text-sm font-bold text-emerald-900">
-                    {isScheduleMode ? "上传作息表" : "选择文件"}
+                  <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-primary-soft text-primary-soft-fg">
+                    <Icon name={selectedPreset.icon} size={26} />
                   </span>
-                  <input
-                    type="file"
-                    accept={fileAccept}
-                    className="block min-h-12 w-full cursor-pointer rounded-lg border border-emerald-200 bg-white text-sm font-semibold text-stone-700 shadow-sm file:mr-4 file:min-h-12 file:cursor-pointer file:border-0 file:bg-emerald-700 file:px-5 file:py-3 file:font-semibold file:text-white hover:file:bg-emerald-800"
-                    onChange={(event) => {
-                      const file = event.target.files?.[0];
-                      if (file) void handleFile(file);
-                      event.currentTarget.value = "";
-                    }}
-                  />
-                </label>
+                  <h2 className="mt-4 text-xl font-extrabold text-fg">
+                    {isScheduleMode ? "上传作息表" : `上传${selectedPreset.label}`}
+                  </h2>
+                  <p className="mt-2 text-sm text-muted">
+                    {selectedPreset.description}
+                    {/* 手机上没有拖拽，只提示点按 */}
+                    <span className="hidden sm:inline">，拖到这里或点击下方按钮</span>
+                    <span className="sm:hidden">，点下方按钮从相册或文件中选择</span>。
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-center gap-3">
+                  <label className="btn btn-primary btn-lg cursor-pointer">
+                    <Icon name="upload" size={18} />
+                    {isScheduleMode ? "选择作息表文件" : "选择文件"}
+                    <input
+                      type="file"
+                      accept={fileAccept}
+                      className="sr-only"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleFile(file);
+                        event.currentTarget.value = "";
+                      }}
+                    />
+                  </label>
+                  <p className="text-xs text-subtle">
+                    支持 JPG / PNG / WebP / PDF / Excel / CSV / TXT，单个文件最大 {MAX_FILE_SIZE_MB}MB
+                  </p>
+                </div>
               </div>
             )}
           </section>
 
-          {(acceptsText || isScheduleMode) && !loading ? (
-            <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="font-bold text-emerald-950">{isScheduleMode ? "文本识别作息" : "文本输入"}</h2>
-                  <p className="mt-1 text-sm text-stone-600">
-                    {isScheduleMode ? "可粘贴作息表，也可写成自然语言节次。" : "适合手动粘贴通知、作业截止或自然语言描述。"}
-                  </p>
-                </div>
-              </div>
+          {/* 文本输入（作息表模式下由下面的作息编辑器接管） */}
+          {acceptsText && !isScheduleMode && !loading ? (
+            <SectionCard
+              icon="type"
+              title="文本输入"
+              description="适合手动粘贴通知、作业截止或自然语言描述。"
+            >
               <textarea
-                value={isScheduleMode ? scheduleText : textInput}
-                onChange={(event) => (isScheduleMode ? setScheduleText(event.target.value) : setTextInput(event.target.value))}
-                rows={isScheduleMode ? 8 : 4}
-                className="mt-4 w-full resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm leading-6 outline-emerald-700"
-                placeholder={isScheduleMode ? "例如：第一节 08:00-08:45" : "例如：下周五晚上七点开班会，地点线上会议"}
+                value={textInput}
+                onChange={(event) => setTextInput(event.target.value)}
+                rows={4}
+                className="textarea"
+                placeholder="例如：下周五晚上七点开班会，地点线上会议"
               />
-              <button
-                onClick={() =>
-                  void parseText(
-                    isScheduleMode ? scheduleText : textInput,
-                    isScheduleMode ? "TEXT" : selectedPreset.source,
-                    isScheduleMode ? "SCHEDULE" : selectedPreset.intent,
-                  )
-                }
+              <Button
+                variant="primary"
+                icon="sparkles"
+                onClick={() => void parseText(textInput, selectedPreset.source, selectedPreset.intent)}
                 disabled={loading}
-                className="mt-3 rounded-lg bg-emerald-700 px-5 py-2 font-semibold text-white hover:bg-emerald-800 disabled:opacity-60"
+                className="mt-3"
               >
-                {isScheduleMode ? "应用作息表" : "生成事件"}
-              </button>
-            </section>
+                生成事件
+              </Button>
+            </SectionCard>
           ) : null}
 
-          {scheduleOpen && !isScheduleMode ? (
-            <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-              <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
-                <div>
-                  <h2 className="font-bold text-emerald-950">作息映射</h2>
-                  <p className="mt-1 text-sm text-stone-600">课程识别到第几节时，会按这里转换为具体时间。</p>
-                </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => applyScheduleText(scheduleText)}
-                    className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
-                  >
-                    应用
-                  </button>
-                  <button
-                    onClick={() => setScheduleOpen(false)}
-                    className="rounded-lg border border-stone-200 px-4 py-2 text-sm font-semibold text-stone-700 hover:bg-stone-50"
-                  >
-                    收起
-                  </button>
-                </div>
-              </div>
-              <textarea
-                value={scheduleText}
-                onChange={(event) => setScheduleText(event.target.value)}
-                rows={6}
-                className="mt-4 w-full resize-none rounded-lg border border-stone-200 px-3 py-2 text-sm leading-6 outline-emerald-700"
-              />
-            </section>
+          {/* 作息表编辑器：作息表模式下常驻，其他模式下点「编辑」展开 */}
+          {(isScheduleMode || scheduleOpen) && !loading ? (
+            <ScheduleEditor
+              template={scheduleTemplate}
+              onChange={updateScheduleTemplate}
+              onReset={resetSchedule}
+              externalIssues={scheduleIssues}
+              onClose={isScheduleMode ? undefined : () => setScheduleOpen(false)}
+            />
           ) : null}
-        </main>
+        </div>
 
+        {/* 侧栏 */}
         <aside className="space-y-5">
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <h2 className="font-bold text-emerald-950">学期起始</h2>
-            <p className="mt-1 text-sm text-stone-500">请填第一周周一，课程周次会按这个日期换算。</p>
-            <label className="mt-4 block">
-              <span className="text-sm font-semibold text-stone-700">第一周周一</span>
+          <SectionCard
+            icon="calendar"
+            title="学期起始"
+            description="填第一周周一，课程周次按这个日期换算。"
+          >
+            <label>
+              <span className="field-label">第一周周一</span>
               <input
                 type="date"
                 value={semesterStart}
                 onChange={(event) => setSemesterStart(event.target.value)}
-                className="mt-2 w-full rounded-lg border border-stone-200 px-3 py-2 outline-emerald-700"
+                className="input"
               />
             </label>
-          </section>
+          </SectionCard>
 
-          <section className="rounded-xl border border-emerald-100 bg-white p-5 shadow-sm">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <h2 className="font-bold text-emerald-950">作息概览</h2>
-                <p className="mt-1 text-sm text-stone-500">{scheduleMessage}</p>
-              </div>
-              <button
-                onClick={() => setScheduleOpen((open) => !open)}
-                className="rounded-md px-2 py-1 text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
-              >
-                {scheduleOpen ? "收起" : "编辑"}
-              </button>
-            </div>
-            <div className="mt-4 grid max-h-52 grid-cols-2 gap-2 overflow-auto text-xs text-stone-600">
-              {scheduleTemplate.periods.map((period) => (
-                <div key={period.periodNumber} className="rounded-md bg-stone-50 px-2 py-1">
-                  {period.label ?? `第${period.periodNumber}节`} {period.startTime}-{period.endTime}
+          <SectionCard
+            icon="clock"
+            title="作息概览"
+            description={scheduleMessage}
+            action={
+              isScheduleMode ? undefined : (
+                <Button size="sm" variant="ghost" onClick={() => setScheduleOpen((open) => !open)}>
+                  {scheduleOpen ? "收起" : "编辑"}
+                </Button>
+              )
+            }
+          >
+            {/* 按上午 / 下午 / 晚上分组，读起来更接近纸质作息表 */}
+            <div className="scroll-area max-h-64 space-y-3">
+              {groupPeriodsByDayPart(scheduleTemplate.periods).map((group) => (
+                <div key={group.part}>
+                  <p className="mb-1.5 text-xs font-bold tracking-wide text-subtle">
+                    {DAY_PART_LABELS[group.part]}
+                    <span className="tabular ml-1.5 font-normal">{group.periods.length} 节</span>
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
+                    {group.periods.map((period) => (
+                      <div key={period.periodNumber} className="rounded-lg bg-surface-2 px-2 py-1.5">
+                        <span className="font-semibold text-fg">
+                          {period.label ?? `第${period.periodNumber}节`}
+                        </span>
+                        <span className="tabular ml-1 text-muted">
+                          {period.startTime}-{period.endTime}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ))}
+              {scheduleTemplate.periods.length === 0 ? (
+                <p className="text-sm text-muted">作息表是空的，去左边添加节次。</p>
+              ) : null}
             </div>
-            <button
-              onClick={resetSchedule}
-              className="mt-4 w-full rounded-lg border border-emerald-200 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-50"
-            >
-              恢复默认作息
-            </button>
-            {scheduleWarnings.length ? (
-              <div className="mt-3 space-y-1 text-xs text-amber-700">
-                {scheduleWarnings.slice(0, 3).map((warning) => (
-                  <p key={warning}>{warning}</p>
-                ))}
-              </div>
-            ) : null}
-          </section>
+          </SectionCard>
 
-          <section className="rounded-xl border border-stone-200 bg-stone-50 p-5">
-            <h2 className="font-bold text-stone-900">当前约束</h2>
-            <ul className="mt-3 space-y-2 text-sm leading-6 text-stone-600">
-              <li>不做登录。</li>
-              <li>不写数据库，只用内存态。</li>
-              <li>只导出 ICS。</li>
-              <li>输入都围绕时间事件生成。</li>
+          <section className="card-quiet p-5">
+            <h2 className="flex items-center gap-2 font-bold text-fg">
+              <Icon name="shield" size={17} className="text-primary" />
+              当前约束
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm leading-6 text-muted">
+              {["不做登录", "不写数据库，只用内存态", "只导出 ICS", "输入都围绕时间事件生成"].map(
+                (item) => (
+                  <li key={item} className="flex gap-2">
+                    <Icon name="check" size={15} className="mt-1 shrink-0 text-primary" />
+                    {item}
+                  </li>
+                ),
+              )}
             </ul>
           </section>
         </aside>
       </div>
 
       {error ? (
-        <div className="mt-6 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
-          {error}
+        <div role="alert" className="alert alert-danger mt-6 animate-rise">
+          <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
+          <span>{error}</span>
         </div>
       ) : null}
     </div>
   );
 }
-
 

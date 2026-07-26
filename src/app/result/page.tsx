@@ -11,6 +11,8 @@ import {
   formatEventTime,
   sourceLabel,
 } from "@/lib/ui/event-format";
+import { Button, Chip, EmptyState, Stat } from "@/components/ui";
+import { Icon } from "@/components/ui/icon";
 import { useEventStore } from "@/stores/use-event-store";
 
 export default function ResultPage() {
@@ -19,16 +21,16 @@ export default function ResultPage() {
 
   if (!events.length) {
     return (
-      <div className="mx-auto max-w-2xl rounded-2xl border border-emerald-100 bg-white p-8 text-center shadow-sm">
-        <h1 className="text-2xl font-black text-emerald-950">还没有生成事件</h1>
-        <p className="mt-3 text-stone-600">先上传校园信息或输入文本，再回来确认时间事件。</p>
-        <button
-          onClick={() => router.push("/upload")}
-          className="mt-6 rounded-lg bg-emerald-700 px-5 py-3 font-semibold text-white hover:bg-emerald-800"
-        >
-          去生成事件
-        </button>
-      </div>
+      <EmptyState
+        icon="sparkles"
+        title="还没有生成事件"
+        description="先上传校园信息或输入文本，再回来确认时间事件。"
+        action={
+          <Button variant="primary" icon="upload" onClick={() => router.push("/upload")}>
+            去生成事件
+          </Button>
+        }
+      />
     );
   }
 
@@ -39,67 +41,74 @@ export default function ResultPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <StepIndicator current="result" />
-      <div className="mb-8 flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <p className="text-sm font-semibold uppercase tracking-[0.18em] text-emerald-700">Step 2</p>
-          <h1 className="mt-2 text-3xl font-black text-emerald-950">确认时间事件</h1>
-          <p className="mt-3 text-stone-600">共生成 {events.length} 个事件，覆盖 {typeCount} 类校园信息。</p>
-        </div>
-        <div className="grid grid-cols-3 gap-3 text-sm">
-          <div className="rounded-lg border border-emerald-100 bg-white px-4 py-3 shadow-sm">
-            <p className="text-stone-500">平均置信度</p>
-            <p className="mt-1 text-2xl font-black text-emerald-900">{Math.round(averageConfidence * 100)}%</p>
-          </div>
-          <div className="rounded-lg border border-amber-100 bg-white px-4 py-3 shadow-sm">
-            <p className="text-stone-500">需核对</p>
-            <p className="mt-1 text-2xl font-black text-amber-700">{reviewCount}</p>
-          </div>
-          <div className="rounded-lg border border-sky-100 bg-white px-4 py-3 shadow-sm">
-            <p className="text-stone-500">事件类型</p>
-            <p className="mt-1 text-2xl font-black text-sky-700">{typeCount}</p>
-          </div>
-        </div>
-      </div>
 
-      <div className="overflow-hidden rounded-2xl border border-emerald-100 bg-white shadow-sm">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[920px] text-sm">
-            <thead className="bg-emerald-950 text-left text-white">
-              <tr>
-                <th className="px-4 py-3 font-semibold">事件</th>
-                <th className="px-4 py-3 font-semibold">类型</th>
-                <th className="px-4 py-3 font-semibold">时间</th>
-                <th className="px-4 py-3 font-semibold">地点</th>
-                <th className="px-4 py-3 font-semibold">规则</th>
-                <th className="px-4 py-3 font-semibold">来源</th>
-                <th className="px-4 py-3 font-semibold">状态</th>
+      <header className="mb-7 flex flex-col justify-between gap-5 md:flex-row md:items-end">
+        <div>
+          <p className="eyebrow">Step 2</p>
+          <h1 className="mt-2 text-3xl font-extrabold text-fg">确认时间事件</h1>
+          <p className="mt-2.5 text-muted">
+            共生成 <span className="tabular font-semibold text-fg">{events.length}</span> 个事件，覆盖{" "}
+            <span className="tabular font-semibold text-fg">{typeCount}</span> 类校园信息。
+          </p>
+        </div>
+        <div className="grid shrink-0 grid-cols-3 gap-3">
+          <Stat label="平均置信度" value={`${Math.round(averageConfidence * 100)}%`} />
+          <Stat label="需核对" value={reviewCount} tone={reviewCount ? "text-warn" : "text-fg"} />
+          <Stat label="事件类型" value={typeCount} />
+        </div>
+      </header>
+
+      {reviewCount > 0 ? (
+        <div className="alert alert-warn mb-5">
+          <Icon name="alert" size={18} className="mt-0.5 shrink-0" />
+          <span>有 {reviewCount} 条事件置信度偏低或缺时间，建议进编辑台逐条核对后再导出。</span>
+        </div>
+      ) : null}
+
+      {/* 桌面端表格 */}
+      <div className="card hidden overflow-hidden md:block">
+        <div className="scroll-area">
+          <table className="w-full min-w-[900px] text-sm">
+            <thead>
+              <tr className="border-b border-line bg-surface-2 text-left">
+                {["事件", "类型", "时间", "地点", "规则", "来源", "状态"].map((header) => (
+                  <th
+                    key={header}
+                    className="px-4 py-3 text-xs font-bold uppercase tracking-wider text-subtle"
+                  >
+                    {header}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {events.map((event) => (
-                <tr key={event.id} className="border-b border-stone-100 last:border-b-0 hover:bg-emerald-50/50">
-                  <td className="px-4 py-4 font-semibold text-emerald-950">
-                    {event.title}
-                    {event.description ? <p className="mt-1 text-xs font-normal text-stone-500">{event.description}</p> : null}
-                  </td>
-                  <td className="px-4 py-4">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${eventTypeTone(event.type)}`}>
-                      {eventTypeLabel(event.type)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-4 text-stone-700">{formatEventTime(event)}</td>
-                  <td className="px-4 py-4 text-stone-600">
-                    {eventLocation(event)}
-                    {event.type === "EXAM" && event.seatNumber ? (
-                      <p className="mt-1 text-xs text-stone-500">座位号：{event.seatNumber}</p>
+                <tr
+                  key={event.id}
+                  className="border-b border-line transition-colors last:border-b-0 hover:bg-surface-2"
+                >
+                  <td className="px-4 py-3.5">
+                    <p className="font-semibold text-fg">{event.title}</p>
+                    {event.description ? (
+                      <p className="mt-1 text-xs text-subtle">{event.description}</p>
                     ) : null}
                   </td>
-                  <td className="px-4 py-4 text-stone-600">{formatEventRule(event)}</td>
-                  <td className="px-4 py-4 text-stone-600">{sourceLabel(event.source)}</td>
-                  <td className="px-4 py-4">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ${confidenceTone(event.confidence)}`}>
+                  <td className="px-4 py-3.5">
+                    <Chip tone={eventTypeTone(event.type)}>{eventTypeLabel(event.type)}</Chip>
+                  </td>
+                  <td className="tabular px-4 py-3.5 text-muted">{formatEventTime(event)}</td>
+                  <td className="px-4 py-3.5 text-muted">
+                    {eventLocation(event)}
+                    {event.type === "EXAM" && event.seatNumber ? (
+                      <p className="mt-1 text-xs text-subtle">座位号：{event.seatNumber}</p>
+                    ) : null}
+                  </td>
+                  <td className="px-4 py-3.5 text-muted">{formatEventRule(event)}</td>
+                  <td className="px-4 py-3.5 text-muted">{sourceLabel(event.source)}</td>
+                  <td className="px-4 py-3.5">
+                    <Chip tone={confidenceTone(event.confidence)} dot>
                       {confidenceLabel(event.confidence)} {Math.round(event.confidence * 100)}%
-                    </span>
+                    </Chip>
                   </td>
                 </tr>
               ))}
@@ -108,21 +117,50 @@ export default function ResultPage() {
         </div>
       </div>
 
+      {/* 移动端卡片：小屏横滚表格很难用，改成卡片列表 */}
+      <ul className="space-y-3 md:hidden">
+        {events.map((event) => (
+          <li key={event.id} className="card p-4">
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="min-w-0 font-semibold text-fg">{event.title}</h2>
+              <Chip tone={eventTypeTone(event.type)}>{eventTypeLabel(event.type)}</Chip>
+            </div>
+            <div className="mt-3 space-y-1.5 text-sm text-muted">
+              <div className="flex gap-2">
+                <Icon name="clock" size={15} className="mt-0.5 shrink-0 text-subtle" />
+                <span className="tabular">{formatEventTime(event)}</span>
+              </div>
+              <div className="flex gap-2">
+                <Icon name="pin" size={15} className="mt-0.5 shrink-0 text-subtle" />
+                <span>
+                  {eventLocation(event)}
+                  {event.type === "EXAM" && event.seatNumber ? ` · 座位 ${event.seatNumber}` : ""}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <Icon name="refresh" size={15} className="mt-0.5 shrink-0 text-subtle" />
+                <span>
+                  {formatEventRule(event)} · {sourceLabel(event.source)}
+                </span>
+              </div>
+            </div>
+            <div className="mt-3">
+              <Chip tone={confidenceTone(event.confidence)} dot>
+                {confidenceLabel(event.confidence)} {Math.round(event.confidence * 100)}%
+              </Chip>
+            </div>
+          </li>
+        ))}
+      </ul>
+
       <div className="mt-8 flex flex-col justify-between gap-3 sm:flex-row">
-        <button
-          onClick={() => router.push("/upload")}
-          className="rounded-lg border border-stone-200 bg-white px-5 py-3 font-semibold text-stone-700 hover:bg-stone-50"
-        >
+        <Button icon="arrow-left" onClick={() => router.push("/upload")}>
           继续添加来源
-        </button>
-        <button
-          onClick={() => router.push("/editor")}
-          className="rounded-lg bg-emerald-700 px-6 py-3 font-semibold text-white shadow-lg shadow-emerald-100 hover:bg-emerald-800"
-        >
+        </Button>
+        <Button variant="primary" iconRight="arrow-right" onClick={() => router.push("/editor")}>
           进入事件编辑
-        </button>
+        </Button>
       </div>
     </div>
   );
 }
-
